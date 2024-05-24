@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!-- MuClient version 5.07-pre -->
+<!-- Written by Nick Gammon -->
+<!-- Home Page: http://www.mushclient.com/ -->
+
+<!-- Plugin state saved. Plugin: "DarkMUSH_Chat_Echo". World: "Dark Wizardry". -->
+
+<muclient>
+
+<!-- variables -->
+
+<variables
+   muclient_version="5.07-pre"
+   world_file_version="15"
+  >
+  <variable name="channels_table">channels_table = {}
+  channels_table[""] = {}
+  channels_table.inform = {}
+    channels_table.inform.echo = false
+  channels_table.lasertag = {}
+    channels_table.lasertag.echo = false
+  channels_table.ltalk = {}
+    channels_table.ltalk.echo = false
+  channels_table.mafiainfo = {}
+    channels_table.mafiainfo.echo = false
+  channels_table.market = {}
+    channels_table.market.echo = false
+  channels_table.mchat = {}
+    channels_table.mchat.echo = false
+  channels_table.mobsay = {}
+    channels_table.mobsay.echo = false
+  channels_table.music = {}
+    channels_table.music.echo = false
+  channels_table.trivia = {}
+    channels_table.trivia.echo = false
+  channels_table.curse = {}
+    channels_table.curse.echo = false
+  channels_table.dtell = {}
+    channels_table.dtell.echo = false
+  channels_table.ftalk = {}
+    channels_table.ftalk.echo = false
+  channels_table.tiertalk = {}
+    channels_table.tiertalk.echo = false
+  channels_table.tell = {}
+    channels_table.tell.echo = false
+  channels_table.telepathy = {}
+    channels_table.telepathy.echo = false
+  channels_table.tech = {}
+    channels_table.tech.echo = false
+  channels_table.spouse = {}
+    channels_table.spouse.echo = false
+  channels_table.immtalk = {}
+    channels_table.immtalk.echo = false
+  channels_table["��c�G\127"] = {}
+  channels_table.dream = {}
+  channels_table["\12�O��\127"] = {}
+  channels_table["(null)"] = {}
+  channels_table.group = {}
+  channels_table.chat = {}
+  channels_table.quote = {}
+  channels_table.discord = {}
+  channels_table.vent = {}
+  channels_table["x�c�G\127"] = {}
+  channels_table.claninfo = {}
+    channels_table.claninfo.echo = false
+  channels_table.intone = {}
+  channels_table.avatalk = {}
+  channels_table.snewbie = {}
+    channels_table.snewbie.echo = false
+  channels_table.newbie = {}
+    channels_table.newbie.echo = false
+  channels_table.pchat = {}
+    channels_table.pchat.echo = false
+  channels_table.pokerinfo = {}
+    channels_table.pokerinfo.echo = false
+  channels_table.ptell = {}
+    channels_table.ptell.echo = false
+  channels_table.question = {}
+    channels_table.question.echo = false
+  channels_table.racetalk = {}
+    channels_table.racetalk.echo = false
+  channels_table.rauction = {}
+    channels_table.rauction.echo = false
+  channels_table.restores = {}
+    channels_table.restores.echo = false
+  channels_table.rp = {}
+    channels_table.rp.echo = false
+  channels_table.say = {}
+    channels_table.say.echo = false
+  channels_table.answer = {}
+    channels_table.answer.echo = false
+  channels_table.auction = {}
+    channels_table.auction.echo = false
+  channels_table.barter = {}
+    channels_table.barter.echo = false
+  channels_table.cant = {}
+    channels_table.cant.echo = false
+  channels_table.chant = {}
+    channels_table.chant.echo = false
+  channels_table.clantalk = {}
+    channels_table.clantalk.echo = false
+  channels_table.commune = {}
+    channels_table.commune.echo = false
+  channels_table.wangrp = {}
+    channels_table.wangrp.echo = false
+  channels_table.wardrums = {}
+    channels_table.wardrums.echo = false
+  channels_table.yell = {}
+    channels_table.yell.echo = false
+  channels_table.gametalk = {}
+    channels_table.gametalk.echo = false
+  channels_table.gclan = {}
+    channels_table.gclan.echo = false
+  channels_table.gossip = {}
+    channels_table.gossip.echo = false
+  channels_table.grapevine = {}
+    channels_table.grapevine.echo = false
+  channels_table.gratz = {}
+    channels_table.gratz.echo = false
+  channels_table.gtell = {}
+    channels_table.gtell.echo = false
+  channels_table.helper = {}
+    channels_table.helper.echo = false</variable>
+  <variable name="nonchannels_table">nonchannels_table = {}
+  nonchannels_table.raidinfo = {}
+    nonchannels_table.raidinfo.echo = false
+  nonchannels_table.claninfo = {}
+    nonchannels_table.claninfo.echo = false
+  nonchannels_table.clan_donations = {}
+    nonchannels_table.clan_donations.echo = false
+  nonchannels_table.global_quest = {}
+    nonchannels_table.global_quest.echo = false
+  nonchannels_table.warfare = {}
+    nonchannels_table.warfare.echo = false
+  nonchannels_table.remort_auction = {}
+    nonchannels_table.remort_auction.echo = false
+  nonchannels_table.info = {}
+    nonchannels_table.info.echo = false</variable>
+</variables>
+</muclient>

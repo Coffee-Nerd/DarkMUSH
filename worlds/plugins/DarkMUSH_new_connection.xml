@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+
+<muclient>
+<plugin
+   name="DarkMUSH_New_Connection"
+   author="Fiendish"
+   id="9f796334ab9ed476ef44f1dc"
+   language="Lua"
+   purpose="Welcome players to the new client package"
+   date_written="2010-11-22 18:32:06"
+   requires="4.73"
+   version="1.0"
+   save_state="y"
+>
+</plugin>
+<script>
+<![CDATA[
+done = false
+function OnPluginListChanged()
+   if not done then
+      done = true
+      
+      if GetVariable("showGreeting3") == nil then
+         ShowGreeting()
+      else
+         Connect()
+      end
+   end
+end
+
+function ShowGreeting()
+   vi_msg = ""
+   if not aard_req_novisuals_mode then
+      vi_msg = "Screen reader users: The non-visual version of this package available at https://fiendish.github.io/aardwolfclientpackage/ comes pre-configured for screen reader output, less display clutter, and sound effects.\n\n"
+   end
+   utils.msgbox("Welcome to the Aardwolf MUSHclient Package!\n\nFor client help, type 'aard help' at any time after dismissing this message.\n\n"..vi_msg.."This dialog will not be displayed again.", "Welcome", "ok", "i")
+   SetVariable("showGreeting3", 0)
+   Connect()
+end
+]]>
+</script>
+</muclient>

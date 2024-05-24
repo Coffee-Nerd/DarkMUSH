@@ -1,0 +1,543 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+
+<muclient>
+<plugin
+   name="DarkMUSH_Plugin_Updater"
+   author="Asmodeus and Hadar"
+   id="15bf0c926513966c26478da0"
+   language="Lua"
+   purpose="Manage and maintain multiple scripts from GitHub"
+   save_state="y"
+   date_written="2022-10-24 00:00:00"
+   requires="4.00"
+   version="2.08"
+   >
+
+</plugin>
+
+<include name="constants.lua"/>
+
+<aliases>
+     <alias
+     script="pmMain"
+     match="^pru ?(.*)?$"
+     enabled="y"
+     regexp="y"
+     sequence="100"
+     >
+     </alias>
+     <alias
+     script="updatePlugin"
+     match="^#updatePlugin ([0-9a-zA-Z]+)$"
+     enabled="y"
+     regexp="y"
+     sequence="100"
+     >
+     </alias>
+     <alias
+     script="reloadPlugin"
+     match="^reloadPlugin ([0-9a-zA-Z]+)$"
+     enabled="y"
+     regexp="y"
+     sequence="100"
+     >
+     </alias>
+     <alias
+     script="removePlugin"
+     match="^removePlugin ([0-9a-zA-Z]+)$"
+     enabled="y"
+     regexp="y"
+     sequence="100"
+     >
+     </alias>
+     <alias
+     script="installPlugin"
+     match="^installPlugin ([0-9a-zA-Z]+)$"
+     enabled="y"
+     regexp="y"
+     sequence="100"
+     >
+     </alias>
+     <alias match="^pru help$"
+	enabled="y"
+	sequence="100"
+	send_to="12"
+	regexp="y"
+	keep_evaluating="y"
+	>
+	<send>
+		PruHelp()
+	</send>
+     </alias>
+</aliases>
+
+<script>
+<![CDATA[
+require "serialize"
+require "tprint"
+local json = require("json")
+dofile(GetInfo(60) .. "darkwiz_plugin_colors.lua")
+
+local gitHubRaw = "https://raw.githubusercontent.com/Coffee-Nerd/DarkMUSH-Updater/main/github.list"
+local rawPluginUrl
+  
+
+function utilprint(str, messageType)
+
+	if messageType == "error" then
+          AnsiNote(ColoursToANSI("@x238[@RDE@x202MO@x208N P@x214LU@x220G@x228IN @x220MA@x214NA@x208G@x202E@RR@x238]@W:@w"..str))
+     elseif messageType == "script" then
+          AnsiNote(ColoursToANSI("@x238@x238[@RDE@x202MO@x208N P@x214LU@x220G@x228IN @x220MA@x214NA@x208G@x202E@RR@x238]@c "..str))
+     else
+		AnsiNote(ColoursToANSI(str))
+	end
+	
+end
+
+function OnPluginSaveState ()
+	SetVariable ("hpmVar", "hpmVar = " .. serialize.save_simple (hpmVar))
+	SetVariable ("hpmpastfirstinstall2", "true")
+end -- function OnPluginSaveState
+
+
+function OnPluginInstall ()
+     PLUGIN_VERSION  = GetPluginInfo(GetPluginID(), 19)
+     PLUGIN_NAME   = GetPluginInfo(GetPluginID(), 1)
+   	if GetVariable ("enabled") == "false" then
+		ColourNote ("yellow", "", "Warning: Plugin " .. GetPluginName ().. " is currently disabled.")
+		check (EnablePlugin(GetPluginID (), false))
+		return
+	end 
+	
+	utilprint("Use pru help for help regarding the updater - this notification will look better in the future","script")
+  
+	OnPluginEnable ()
+end
+
+function OnPluginEnable ()
+     hpmVar = {}
+     hpmVar["cache"] = {}
+     ghName = nil
+     if GetVariable ("hpmpastfirstinstall2") == "true" then
+		assert (loadstring (GetVariable ("hpmVar") or "")) ()
+	end
+     makeRawUrl()
+     buildCache()    
+end
+
+function OnPluginListChanged()
+    SaveState()
+ end
+
+function string.explode(str, separator, plain)
+    assert(type(separator) == "string" and separator ~= "", "Invalid separator (need string of length >= 1)") -- Check if the separator is valid
+
+    local result = {}  -- Table to hold the segments
+    local nextIndex = 1  -- The next index where we will insert
+    local currentPosition = 1  -- Starting position for each search
+
+    while true do
+        local start, stop = str:find(separator, currentPosition, plain)         -- Find the next instance of separator
+        
+        if not start then break end         -- If no more separators, then break
+
+        if currentPosition ~= start then         -- If there are characters before the separator, add them to result
+            result[nextIndex] = str:sub(currentPosition, start - 1)
+            nextIndex = nextIndex + 1
+        end
+
+        currentPosition = stop + 1         -- Move the current position past this instance of separator
+    end
+
+    result[nextIndex] = str:sub(currentPosition)     -- Add the last segment of the string to the result
+
+    return result
+end
+
+
+function onSendActionComplete(success,data)
+     if success then
+          ghName = data
+     else
+          return
+     end
+end
+
+function pmMain(l, m, wc)
+     local first, rest = wc[1]:match("(%w+)%s*(.*)")
+     
+     if first == nil then
+          PruHelp()
+          return
+     end
+     
+     if first == "check" then
+          pmList()
+     elseif first == "update" then
+          updatePluginThis()
+     elseif first == "help" then
+          PruHelp()
+     end
+     
+end
+    
+-- Global variables
+build_Len = 0
+build_res = 0
+
+function pmList()
+    makeRawUrl()
+    buildCache()
+
+    build_Len = tablelength(rawPluginUrl)
+    build_res = 0
+
+   -- utilprint("@x238+---------------------[...]")
+    for a, b in pairs(rawPluginUrl) do
+        if b ~= "" then
+            async_ok, async = pcall(require, "async")
+            ghName = async.doAsyncRemoteRequest(b, buildOutput, "HTTPS")
+        end
+    end
+end
+
+function buildOutput(retval, page, status, headers, full_status, request_url)
+    local pluginId, ghName
+
+    if status == 200 then
+        ghName = getName(page, true)
+        pluginId = string.match(page, '%s+id="(%w+)"')
+    else
+        print(request_url)
+        utilprint("Cant connect to github", "error")
+        return
+    end
+
+    build_res = build_res + 1
+
+    renderPluginInfo(build_res, build_Len, ghName, pluginId)
+
+end
+
+-- Create colored hyperlink
+function createColoredHyperlink(action, colorString, hint)
+    local styles = ColoursToStyles(colorString)  -- Convert Aardwolf color codes to MUSHclient style runs
+    
+    for _, v in pairs(styles) do                 -- Loop through the styles to create the hyperlink
+        local styleToUse = v.bold and 1 or 0     -- Check if 'bold' exists and set style accordingly
+        NoteStyle(styleToUse)
+
+        if v.text and v.textcolour then          -- Check all required fields
+            local backcolour = 0                 -- Since 'backcolour' is missing, we'll use a default (let's say black: 0)
+            
+            Hyperlink(
+                action,                          -- What happens when you click the link
+                v.text,                          -- Displayed text
+                hint,                            -- What displays when you hover over the link
+                RGBColourToName(v.textcolour),   -- Foreground color
+                RGBColourToName(backcolour),     -- Background color (default to black)
+                0,
+                true
+            )
+        else
+            Note("One of the necessary fields (text, textcolour, backcolour) is missing in the styles table")
+        end
+    end
+end
+
+function simple_utf8_char(code)
+    if code < 128 then
+        return string.char(code)
+    elseif code < 2048 then
+        return string.char(192 + math.floor(code / 64), 128 + code % 64)
+    elseif code < 65536 then
+        return string.char(224 + math.floor(code / 4096), 128 + math.floor(code % 4096 / 64), 128 + code % 64)
+    else
+       return string.char(240 + math.floor(code / 262144), 128 + math.floor(code % 262144 / 4096), 128 + math.floor(code % 4096 / 64), 128 + code % 64)
+    end
+end
+
+
+function displayUnicode(code_point)
+    return simple_utf8_char(tonumber(code_point, 16))
+end
+
+function unicodeprint(string)
+    string = string:gsub("#(%x+)", function(hex)
+        return displayUnicode(hex)
+    end)
+    Simulate(ColoursToANSI(string))
+end
+function printHorizontalLine(length)
+    local line = displayUnicode("2500"):rep(length)
+    unicodeprint("@x238│" .. line .. "│")
+end
+
+-- Function to print a separator
+function printSeparator(length)
+    unicodeprint("@x238├" .. displayUnicode("2500"):rep(length - 2) .. "┤\n")
+end
+-- Default foreground color
+local defaultForegroundColor = "238"
+
+function TellUnicodeColours(color_coded_str)
+    -- Replace Unicode code points first
+    local stringWithUnicode = color_coded_str:gsub("#(%x+)", function(hex)
+        return displayUnicode(hex)
+    end)
+
+    -- Prepend the default foreground color to the string
+    stringWithUnicode = "@x" .. defaultForegroundColor .. stringWithUnicode
+
+    -- Convert Aardwolf color codes to style objects
+    local styles = ColoursToStyles(stringWithUnicode, "w", nil)
+
+    -- Loop through the styles and apply them with ColourTell
+    for _, style in ipairs(styles) do
+        ColourTell(
+            RGBColourToName(style.textcolour),
+            RGBColourToName(style.backcolour or 0),  -- assuming black background if not specified
+            style.text
+        )
+    end
+end
+
+function renderPluginInfo(build_res, build_Len, ghName, pluginId)
+    if build_res == 1 then
+        unicodeprint("@x238┌" .. displayUnicode("2500"):rep(70) .. "┐")
+    else
+        printSeparator(72)
+    end
+    TellUnicodeColours("│ @c[@R" .. build_res .. "@c] " .. ghName .. " ")
+    if IsPluginInstalled(hpmVar["cache"][pluginId]["pluginId"]) then
+        local localVersion = tonumber(hpmVar["cache"][pluginId]["localVersion"])
+        local webVersion = tonumber(hpmVar["cache"][pluginId]["webVersion"])
+        if localVersion < webVersion then
+            Hyperlink("#updatePlugin " .. pluginId, "[Update Plugin] ", "Download and Update Plugin", "DarkOrange", "black", 0, 1)
+        else
+            createColoredHyperlink("reloadPlugin " .. pluginId, "@x238[@x084Re@x048lo@x078ad@x238] ", "Reload plugin")
+        end        
+      createColoredHyperlink("removePlugin " .. pluginId, "@x238[@RRemove@x238] ", "Remove plugin")        
+        if localVersion >= webVersion then
+            ColourTell("Gold", "black", "**", "Green", "black", "UP TO DATE", "Gold", "black", "** ")
+        else
+            ColourTell("Red", "black", " **", "Cyan", "black", "from " .. localVersion .. " to " .. webVersion, "Red", "black", "**")
+        end
+    else
+        createColoredHyperlink("installPlugin " .. pluginId, "@x208[Install] ", "Install plugin")
+    end    
+    TellUnicodeColours("[@YVersion @R" .. hpmVar["cache"][pluginId]["localVersion"] .. "@x238] │")
+    print("")
+    TellUnicodeColours("│  @x073" .. hpmVar["cache"][pluginId]["purpose"] .. " @x238│")
+    print("")
+    if build_res == build_Len then
+        unicodeprint("@x238└" .. displayUnicode("2500"):rep(70) .. "┘")
+    end
+end
+
+
+
+function getName(Data, p)
+    local name
+    if p then
+        name = string.upper(string.gsub(string.match(Data, '%s+name="DarkMUSH?_([%w_]+)"'), "_", " "))
+    else
+        name = string.match(Data, '%s+name="DarkMUSH?_([%w_]+)"')
+    end
+    return name
+end
+
+function loadVariables(wc)
+    local script_id = wc[1]
+    -- Check if the cache entry exists
+    if hpmVar["cache"][script_id] then
+        local script_name = hpmVar["cache"][script_id]["localName"]
+        local script_url = hpmVar["cache"][script_id]["url"]
+        local script_pid = hpmVar["cache"][script_id]["pluginId"]
+
+        return script_id, script_name, script_url, script_pid
+    else
+        print("Error: Cache entry for script_id not found.")
+        return nil
+    end
+end
+
+function handleAsyncRequest(script_url, script_name)
+    local async_ok, async = pcall(require, "async")
+    if async_ok then
+        local script_rawurl = async.request(script_url, "HTTPS")
+        local retval, page, status, headers, full_status = script_rawurl:join()
+
+        if status == 200 then
+            local lscript = io.open(script_name, "w")
+            lscript:write(page)
+            lscript:close()
+        end
+        return status
+    end
+    return nil
+end
+
+function updatePlugin(name, line, wc)
+    local script_id, script_name, script_url, script_pid = loadVariables(wc)
+    utilprint("Updating Plugin @G" .. hpmVar["cache"][script_id]["shortName"] .. "@w", "script")
+    UnloadPlugin(script_pid)
+    local status = handleAsyncRequest(script_url, script_name)
+    utilprint("Plugin @G" .. hpmVar["cache"][script_id]["shortName"] .. "@c Updated Enjoy!", "script")
+    LoadPlugin(script_name)
+end
+
+function installPlugin(name, line, wc)
+    local script_id, script_name, script_url, script_pid = loadVariables(wc)
+    utilprint("@x238Installing Plugin @Y" .. hpmVar["cache"][script_id]["shortName"] .. "@w", "script")
+    local status = handleAsyncRequest(script_url, script_name)
+    utilprint("@x238Plugin @Y" .. hpmVar["cache"][script_id]["shortName"] .. "@x238 Installed... Enjoy!", "script")
+    LoadPlugin(script_name)
+end
+function reloadPlugin(name, line, wc)
+    local script_id, script_name, script_url, script_pid = loadVariables(wc)
+    utilprint("@x238Currently reloading script: @Y" .. hpmVar["cache"][script_id]["shortName"] .. "@x238 please stand by", "script")
+    ReloadPlugin(script_pid)
+end
+
+function removePlugin(name, line, wc)
+    local script_id, script_name, script_url, script_pid = loadVariables(wc)
+    utilprint("Currently Removing script: " .. hpmVar["cache"][script_id]["shortName"] .. "@x238 please stand by")
+    UnloadPlugin(script_pid)
+    local ok, err = os.remove(script_name)
+    if ok then
+        utilprint("@RRemoved@x238 script: @Y" .. hpmVar["cache"][script_id]["shortName"] .. "@w", "script")
+    else
+        utilprint("Was not able to remove @Y" .. hpmVar["cache"][script_id]["shortName"] .. " @R" .. err .. "@w", "error")
+    end
+end
+
+function makeRawUrl()
+     async_ok, async = pcall (require, "async")
+     if async_ok then
+          makeRawURL = async.request(gitHubRaw, "HTTPS")
+          retval, page, status, headers, full_status = makeRawURL:join()
+          
+          if status == 200 then
+               rawPluginUrl = string.explode(page,"\n")
+          end--end 200
+     end --end async_ok
+     return rawPluginUrl
+end
+
+function raw_get(retval, page, status, headers, full_status, request_url)
+     if status == 200 then
+          print(page)
+     end
+end
+
+function tablelength(T)
+  local count = 0
+  for i,v in pairs(T) do 
+     if v ~= "" then
+          count = count + 1
+     end
+  end
+  return count
+end
+
+function buildCache()
+    cache_Len = tablelength(rawPluginUrl)
+    cache_res = 0
+    
+    local async_ok, async = pcall(require, "async")
+    if async_ok then
+        if rawPluginUrl == nil then
+            utilprint("Please make sure the URL is properly filled out", "error")
+            return
+        end
+        
+        for a, b in pairs(rawPluginUrl) do
+            if b ~= "" then
+                async.doAsyncRemoteRequest(b, raw_get_cache, "HTTPS")
+            end
+        end
+    else
+        utilprint("Something went wrong with async in building cache", "error")
+    end
+end
+
+function raw_get_cache(retval, page, status, headers, full_status, request_url)
+    local webName, rawName, webVersion, pluginId, localVersion, localName
+    local script_directory = GetInfo(60)
+    
+    if status == 200 then
+        webName = getName(page, false)
+        rawName = string.match(page, '%s+name="([a-zA-Z0-9_]+)"')
+        webVersion = string.match(page, '%s+version="(%d+%.?%d+)"')
+        pluginId = string.match(page, '%s+id="(%w+)"')
+        purpose = string.match(page, '%s+purpose="([^"]+)"')
+        localVersion = GetPluginInfo(pluginId, 19)
+        localName = script_directory.. rawName.. ".xml"
+        hpmVar["cache"][pluginId] = {}
+    else
+        utilprint("Can't connect to GitHub", "error")
+        return
+    end
+    
+    cache_res = cache_res + 1
+    
+    hpmVar["cache"][pluginId] = {
+        shortName = webName,
+        rawname = rawName,
+        webVersion = webVersion,
+        pluginId = pluginId,
+        localVersion = localVersion,
+        localName = localName,
+        url = request_url,
+        purpose = purpose
+    }
+end
+
+
+function updatePluginThis()
+     raw = "https://raw.githubusercontent.com/Coffee-Nerd/DarkMUSH/main/worlds/plugins/DarkMUSH_Plugin_Updater.xml"
+     async_ok, async = pcall (require, "async")
+     if async_ok then
+          plugin_page = async.doAsyncRemoteRequest(raw, Raw_Update, "HTTPS")
+     else
+          utilprint("Error on updating","error")
+     end
+end
+
+function Raw_Update(retval, page, status, headers, full_status, request_url)
+        if status == 200 then
+            raw_version = tonumber(string.match(page, '%s%s+version="(%d+%.?%d+)"'))
+        end
+
+        if tonumber(raw_version) == tonumber(PLUGIN_VERSION) then
+            utilprint("@Y"..PLUGIN_NAME .. "@x238 is up to date!","script")
+        elseif tonumber(raw_version) > tonumber(PLUGIN_VERSION) then
+            utilprint("Updating from version @R"..PLUGIN_VERSION.."@x238 to @R"..raw_version.."@x238 Please stand by.","script")
+            local file = io.open(GetPluginInfo(GetPluginID(), 6), "w")
+            file:write(page)
+            file:close()
+            if "" == GetAlphaOption("script_prefix") then
+                SetAlphaOption("script_prefix", "\\\\\\")
+            end
+            Execute(GetAlphaOption("script_prefix") .. "DoAfterSpecial(1, \"ReloadPlugin('" .. GetPluginID() .. "')\", sendto.script)")
+            utilprint("Updating is complete, Have a muddish day!","script")
+        elseif tonumber(raw_version) < tonumber(PLUGIN_VERSION) then
+          utilprint("Your development is too quick!","error")
+        end
+        raw_version = nil
+    end -- end Update code
+
+function PruHelp()
+utilprint("@x238+---------------------@x238[@RDE@x202MO@x208N P@x214LU@x220G@x228IN @x220MA@x214NA@x208G@x202E@RR @WVer @Y"..GetPluginInfo (GetPluginID (), 19).."@x238]------------------+")
+utilprint("@x238| @x214pru help                @x110- @x214Displays this helpfile @x238                    |")
+utilprint("@x238| @x208pru check               @x110- @x208Checks to see if there is any updates @x238     |")
+utilprint("@x238| @x214pru update              @x110- @x214Checks for updates on this script@x238          |")
+utilprint("@x238+----------------------------------------------------------------------+")
+end
+
+]]>
+</script> 
+
+</muclient>

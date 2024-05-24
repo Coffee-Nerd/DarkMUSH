@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<muclient>
+<plugin
+   name="DarkMUSH_Copy_Colour_Output"
+   author="Fiendish"
+   id="04d9e64f835452b045b427a7"
+   language="Lua"
+   purpose="Copies output with colour codes"
+   save_state="n"
+   date_written="2008-07-28"
+   requires="4.00"
+   version="1.1"
+   >
+
+<description trim="y">
+Copies text from the output window to the clipboard, with
+Aardwolf colour codes.
+
+To use: highlight text and then:
+
+Ctrl+D copy (like Ctrl+C but different)
+or: Ctrl + Left-click and select "Copy with Colour"
+
+</description>
+
+</plugin>
+
+<aliases>
+  <alias
+    match="Copy_With_Colour:04d9e64f835452b045b427a7"
+    enabled="y"
+    omit_from_output="y"
+    sequence="100"
+    script="CopyScript"
+    name="Copy_With_Colour"
+    menu="y"
+></alias>
+</aliases>
+
+<!--  Script  -->
+
+<script>
+<![CDATA[
+require "color_copy"
+
+function OnPluginListChanged()
+   
+end
+
+function CopyScript(name, line, wildcs)
+   cpstr = get_selection_with_color()
+   if not cpstr then -- if nothing to copy from output window
+      DoCommand("copy")
+   else
+      SetClipboard(cpstr)
+   end
+end
+
+AcceleratorTo ("Ctrl+D", "CallPlugin ('04d9e64f835452b045b427a7', 'CopyScript', '')", sendto.script)
+
+]]>
+</script>
+</muclient>

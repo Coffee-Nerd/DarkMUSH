@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!-- MuClient version 5.07-pre -->
+<!-- Written by Nick Gammon -->
+<!-- Home Page: http://www.mushclient.com/ -->
+
+<!-- Plugin state saved. Plugin: "DarkMUSH_Plugin_Updater". World: "Dark Wizardry". -->
+
+<muclient>
+
+<!-- variables -->
+
+<variables
+   muclient_version="5.07-pre"
+   world_file_version="15"
+  >
+  <variable name="hpmVar">hpmVar = {
+  cache = {
+    ["9c0ed228bdb4a71c77e85ce2"] = {
+      webVersion = "1.0",
+      localName = ".\\worlds\\plugins\\OdinMUSH_ASCII_Mapper.xml",
+      rawname = "OdinMUSH_ASCII_Mapper",
+      url = "https://raw.githubusercontent.com/Coffee-Nerd/OdinMUSH/main/worlds/plugins/OdinMUSH_ASCII_Mapper.xml",
+      purpose = "Displays the Ascii Map",
+      shortName = "ASCII_Mapper",
+      pluginId = "9c0ed228bdb4a71c77e85ce2",
+      },
+    ["15bf0c926513966c26478da0"] = {
+      webVersion = "1.0",
+      lname = "Z:\\home\\asmodeus\\GitHub\\OdinMUSH\\worlds\\plugins\\OdinMUSH_Plugin_Updater.xml",
+      rawname = "Demon_Updater",
+      url = "https://raw.githubusercontent.com/Coffee-Nerd/OdinMUSH/main/worlds/plugins/OdinMUSH_Plugin_Updater.xml",
+      purpose = "Manage and maintain multiple scripts from GitHub",
+      pluginId = "15bf0c926513966c26478da0",
+      localVersion = 2,
+      },
+    a3a5abf8ec2ec2d2e3600634 = {
+      webVersion = "1.0",
+      localName = ".\\worlds\\plugins\\OdinMUSH_Builder_Helper.xml",
+      rawname = "OdinMUSH_Builder_Helper",
+      url = "https://raw.githubusercontent.com/Coffee-Nerd/OdinMUSH-Updater/main/OdinMUSH_Builder_Helper.xml",
+      purpose = "makes building easier",
+      shortName = "Builder_Helper",
+      pluginId = "a3a5abf8ec2ec2d2e3600634",
+      },
+    c293f9e7f04dde889f65cb90 = {
+      webVersion = "1.0",
+      rawname = "OdinMUSH_Main_Layout",
+      localName = ".\\worlds\\plugins\\OdinMUSH_Main_Layout.xml",
+      purpose = "Main output window for OdinMUSH",
+      url = "https://raw.githubusercontent.com/Coffee-Nerd/OdinMUSH/main/worlds/plugins/OdinMUSH_layout.xml",
+      pluginId = "c293f9e7f04dde889f65cb90",
+      shortName = "Main_Layout",
+      localVersion = 1,
+      },
+    },
+  }</variable>
+  <variable name="hpmpastfirstinstall2">true</variable>
+</variables>
+</muclient>

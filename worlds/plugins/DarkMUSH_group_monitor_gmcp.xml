@@ -1,0 +1,1528 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<muclient>
+<plugin
+   name="DarkMUSH_Group_Monitor"
+   author="Fiendish"
+   id="f178e68512c685b3be1e9b07"
+   language="Lua"
+   purpose="Aardwolf Group Monitor"
+   date_written="2010-12-13 15:35:02"
+   requires="4.73"
+   version="2.0"
+   save_state="y"
+>
+
+<description trim="y">
+
+Aardwolf Group Monitor
+
+Gives a persistant visual display of the status of your group members using
+details captured through GMCP.
+
+</description>
+
+</plugin>
+
+<aliases>
+
+<alias
+   match="resetaard"
+   enabled="y"
+   sequence="100"
+   ignore_case="y"
+   script="reset_aard"
+></alias>
+
+-- show the group window
+<alias
+   match="groupon"
+   enabled="y"
+   sequence="100"
+   omit_from_output="y"
+   script="ShowIt"
+></alias>
+
+-- hide the group window
+<alias
+   match="groupoff"
+   enabled="y"
+   sequence="100"
+   omit_from_output="y"
+   script="HideIt"
+></alias>
+
+<alias
+match="grouproom"
+enabled="y"
+sequence="100"
+omit_from_output="y"
+script="toggleInRoom"
+></alias>
+
+<alias
+match="groupsetroom"
+enabled="y"
+sequence="100"
+omit_from_output="y"
+script="setToRoom"
+></alias>
+
+<alias
+match="groupsetall"
+enabled="y"
+sequence="100"
+omit_from_output="y"
+script="showAllMembers"
+></alias>
+
+<alias
+match="groupsetnone"
+enabled="y"
+sequence="100"
+omit_from_output="y"
+script="hideAllMembers"
+></alias>
+
+<alias
+match="groupcompact"
+enabled="y"
+sequence="100"
+omit_from_output="y"
+script="toggle_compact"
+></alias>
+
+<alias
+script="showPlayer"
+match="^showp\s(.*)$"
+keep_evaluating="y"
+enabled="y"
+regexp="y"
+send_to="12"
+sequence="100"
+>
+</alias>
+
+<alias
+script="hidePlayer"
+match="^hidep\s(.*)$"
+keep_evaluating="y"
+enabled="y"
+regexp="y"
+send_to="12"
+sequence="100"
+>
+</alias>
+</aliases>
+
+<triggers>
+<trigger
+   enabled="y"
+   match="^(\w+) has invited you to join group: (.*)\.$"
+   script="group_invite"
+   regexp="y"
+   sequence="100"
+   custom_colour="17"
+   other_text_colour="#FFFFFF"
+   other_back_colour="#0000FF"
+></trigger>
+
+<trigger
+   enabled="y"
+   match="^(\w+) has cancelled your invitation to join group: (.*)\.$"
+   script="group_cancel"
+   regexp="y"
+   sequence="100"
+   custom_colour="17"
+   other_text_colour="#FFFFFF"
+   other_back_colour="#FF0000"
+></trigger>
+
+<trigger
+   enabled="y"
+   match="^You have declined the group invitation from (\w+)\.$"
+   script="group_cancel"
+   regexp="y"
+   sequence="100"
+   custom_colour="17"
+   other_text_colour="#FFFFFF"
+   other_back_colour="#FF0000"
+></trigger>
+
+<trigger
+   enabled="y"
+   match="^You have no invitation outstanding from (\w+)\.$"
+   script="group_cancel"
+   regexp="y"
+   sequence="100"
+   custom_colour="17"
+   other_text_colour="#FFFFFF"
+   other_back_colour="#FF0000"
+></trigger>
+
+<trigger
+   enabled="y"
+   match="^Your group invite from (\w+) is cancelled because the group has been disbanded\.$"
+   script="group_cancel"
+   regexp="y"
+   sequence="100"
+   custom_colour="17"
+   other_text_colour="#FFFFFF"
+   other_back_colour="#FF0000"
+></trigger>
+
+<trigger
+   enabled="y"
+   match="^Your group invitation from (\w+) is cancelled because (\w+) has left that group\.$"
+   script="group_cancel"
+   regexp="y"
+   sequence="100"
+   custom_colour="17"
+   other_text_colour="#FFFFFF"
+   other_back_colour="#FF0000"
+></trigger>
+
+<trigger
+   enabled="y"
+   match="^Your group invitation from (\w+) is cancelled because (\w+) has left the game\.$"
+   script="group_cancel"
+   regexp="y"
+   sequence="100"
+   custom_colour="17"
+   other_text_colour="#FFFFFF"
+   other_back_colour="#FF0000"
+></trigger>
+</triggers>
+
+<script>
+<![CDATA[
+require "aard_register_z_on_create"
+
+require "mw_theme_base"
+
+require "gauge"
+require "movewindow"
+require "gmcphelper"
+require "copytable"
+require "serialize"
+
+default_x = 868 + Theme.RESIZER_SIZE + 2
+default_y = 336
+default_height = 215
+default_width = 269
+height = tonumber(GetVariable("height")) or default_height
+width = tonumber(GetVariable("width")) or default_width
+show_self = tonumber(GetVariable("show_self")) or 1
+in_room = tonumber(GetVariable("in_room")) or 0
+show_hp = tonumber(GetVariable("show_hp")) or 1
+show_mn = tonumber(GetVariable("show_mn")) or 1
+show_mv = tonumber(GetVariable("show_mv")) or 1
+show_quest = tonumber(GetVariable("show_quest")) or 1
+show_tnl = tonumber(GetVariable("show_tnl")) or 1
+hidden = tonumber(GetVariable("hidden")) or 0
+sort_hp_which = GetVariable("sort_hp_which") or "" -- percent damage or total damage
+DeleteVariable("sort_hp")
+sort_quests = tonumber(GetVariable("sort_quests")) or 0
+gauge_style = tonumber(GetVariable("flat_gauges")) or tonumber(GetVariable("gauge_style")) or 0
+DeleteVariable("flat_gauges")
+number_style = tonumber(GetVariable("number_style")) or 1
+overlay_numbers = tonumber(GetVariable("overlay_numbers")) or 0
+ultracompact = (GetVariable("ultracompact") or "0") == "1" -- default false
+
+GAP = 4
+font_size = 0
+font_name = ""
+group_members = {}
+group_info = {}
+
+local defaultColorVals = {Health={0x00ff00,0x004400}, Mana={0xff5500,0x442200}, Moves={0x00ffff,0x004444}, Align={0x0000ff,0x00ffff}}
+colorVals = defaultColorVals
+assert (loadstring (GetVariable ("colorVals") or "")) ()
+
+thresh1active = tonumber (GetVariable("thresh1active")) or 0
+thresh2active = tonumber (GetVariable("thresh2active")) or 0
+thresh1percent = tonumber (GetVariable("thresh1percent")) or 40
+thresh2percent = tonumber (GetVariable("thresh2percent")) or 20
+thresh1color = tonumber (GetVariable("thresh1color")) or 0x00ffff
+thresh2color = tonumber (GetVariable("thresh2color")) or 0x0000ff
+
+local barIndex = {"Health", "Mana", "Moves", "Align"}
+
+RESIZE_TAG_SIZE = 10
+MIN_SIZE        = 100
+
+-- Variables not saved.
+startx      = ""
+starty      = ""
+posx        = ""
+posy        = ""
+hidden_members = {}
+
+-- pull in telnet option handling
+dofile (GetPluginInfo (GetPluginID(), 20) .. "telnet_options.lua")
+
+-- functions for handling Aardwolf color codes
+dofile (GetPluginInfo (GetPluginID(), 20) .. "darkwiz_colors.lua")
+
+function reset_aard()
+   font_name = default_font_name
+   font_size = default_font_size
+   WindowPosition(win, default_x, default_y, 0, 18)
+   WindowResize(win, default_width, default_height, Theme.PRIMARY_BODY)
+   Repaint() -- hack because WindowPosition doesn't immediately update coordinates
+   SaveState()
+   OnPluginInstall()
+end
+
+function SetUpHotspotsAndDraw(firstTime)
+   -- don't use windowcreate after the first time, because it messes with hotspot handlers
+   if (firstTime == true) then
+      check (WindowCreate (win,
+         windowinfo.window_left, windowinfo.window_top,   -- left, top (auto-positions)
+         width,     -- width
+         height,  -- height
+         windowinfo.window_mode,       -- auto-position: middle right
+         windowinfo.window_flags,  -- flags
+         Theme.PRIMARY_BODY) )
+      -- Add the drag handler so they can move the window around
+      movewindow.add_drag_handler (win, 0, 0, 0, 0)
+
+      if hidden == 0 then
+         WindowShow (win, true)
+      end
+   else
+      -- everything has already been made
+      -- just move them back into place
+      WindowResize(win, width, height, Theme.PRIMARY_BODY)
+   end
+   DisplayGroupPage()
+end
+
+string.lpad = function(str, len, char)
+   if char == nil then char = ' ' end
+   return string.rep(char, len - #str) .. str
+end
+
+string.rpad = function(str, len, char)
+   if char == nil then char = ' ' end
+   return str .. string.rep(char, len - #str)
+end
+
+function RemoveMembersFromGroupDisplay()
+   group_members = {}
+   if (full_group_data ~= nil) then
+      for i,v in ipairs(full_group_data.members) do
+         if not (
+            hidden_members[v.name]
+            or ((show_self == 0) and (char_data ~= nil) and (v.name == char_data.name))
+            or ((in_room == 1) and (v.info.here == '0'))
+         ) then
+            table.insert(group_members, v)
+         end
+      end
+   end
+end
+
+function showAllMembers()
+   ColourNote("yellow", "", "All members will be shown in the group monitor window.")
+   hidden_members = {}
+   -- save and reload
+   SaveState()
+   RemoveMembersFromGroupDisplay()
+   OnPluginInstall()
+end
+
+-- put all current group members into the hidden_members list
+function hideAllMembers()
+   ColourNote("yellow", "", "All members will be hidden from the group monitor window.")
+
+   hidden_members = {}
+   if full_group_data and full_group_data.members and char_data and char_data.name then
+      for i,v in ipairs(full_group_data.members) do
+         if v.name ~= char_data.name then
+            hidden_members[v.name] = true
+         end
+      end
+   end
+   -- save and reload
+   SaveState()
+   RemoveMembersFromGroupDisplay()
+   OnPluginInstall()
+end
+
+function byTotalDamage(a, b)
+   return (tonumber(a.info.mhp) - tonumber(a.info.hp)) > (tonumber(b.info.mhp) - tonumber(b.info.hp))
+end
+
+function byPercentDamage(a, b)
+   return (tonumber(a.info.hp) / tonumber(a.info.mhp)) < (tonumber(b.info.hp) / tonumber(b.info.mhp))
+end
+
+function sortMembers()
+   if sort_hp_which == "total" then
+      table.sort(group_members, byTotalDamage)
+   else
+      table.sort(group_members, byPercentDamage)
+   end
+end
+
+function drawGauge(label, base, max, x, y, bar_width, bar_height, color1, color2)
+   if label and label ~= "" then
+      WindowText(win, font_id, label, x, y, 0, 0, Theme.BODY_TEXT, utf8)
+      x = x + labels_width
+   end
+   x = x + GAP
+
+   if gauge_style ~= 2 then
+      gauge(win, nil, tonumber(base), tonumber(max), x, y, bar_width, bar_height, color1, 0x000000, 0, 0x000000, color2, nil, gauge_style==1)
+   end
+   return x
+end
+
+function drawLabel(x, y, bar_width, txt, label_color, overlay_numbers)
+   if overlay_numbers == 0 then
+      if gauge_style ~= 2 then
+         x = x+bar_width+GAP
+      else
+         x = x+((bar_width-WindowTextWidth(win, font_id, txt))/2)
+      end
+      WindowText(win, font_id, txt, x, y, 0, 0, label_color, utf8)
+   else
+      x = x+((bar_width-WindowTextWidth(win, font_id, txt))/2)
+      if gauge_style ~= 2 then
+         outlined_text(win, font_id, txt, x, y, 0, 0, label_color, utf8)
+      else
+         WindowText(win, font_id, txt, x, y, 0, 0, label_color, utf8)
+      end
+   end
+end
+
+function limit_n(input) -- this shortens numbers over 100,000 to prevent overreaching the subwindow boundaries
+   local n = tonumber(input)
+   local usn = math.abs(n)
+   function exp_format(amount, unit)
+      local ret = string.format("%.0f", amount)
+      if #ret == 1 then
+         ret = string.format("%.1f", amount)
+      end
+      return ret..unit
+   end
+   if usn < 10^5 then
+      return input
+   elseif usn < 10^6 then
+      return exp_format(n / 10^3, "k")
+   elseif usn < 10^9 then
+      return exp_format(n / 10^6, "m")
+   elseif usn < 10^12 then
+      return exp_format(n / 10^9, "b")
+   end
+end
+
+
+-- build and draw the group display
+function DisplayGroupPage()
+   WindowRectOp(win, 2, 2, 2,-2,-2, Theme.PRIMARY_BODY) -- blank
+
+   if not group_built then
+      if next(invitations) == nil then
+         txt = "No Group To Display"
+         txtlen = WindowTextWidth(win,font_id, txt)
+         WindowText(win, font_id, txt, (width-txtlen)/2, title_height/4, 0, 0, Theme.BODY_TEXT, utf8)
+         txt = "Group info will appear"
+         txtlen = WindowTextWidth(win,font_id,txt)
+         WindowText (win, font_id, txt, (width-txtlen)/2, height/2, 0, 0, Theme.BODY_TEXT, utf8)
+         txt = "once you create or join one."
+         txtlen = WindowTextWidth(win,font_id,txt)
+         WindowText (win, font_id, txt, (width-txtlen)/2, height/2+line_height, 0, 0, Theme.BODY_TEXT, utf8)
+      else
+         local lines = {}
+         txt = "Pending Group Invitations"
+         txtlen = WindowTextWidth(win, font_id, txt)
+         WindowText(win, font_id, txt, (width-txtlen)/2, title_height/4, 0, 0, Theme.BODY_TEXT, utf8)
+         table.insert(lines, "[ Leader     : Group Name ]")
+         table.insert(lines, "---------------------------")
+         for k,v in pairs(invitations) do
+            table.insert(lines, string.rpad(k,12).." : "..v)
+         end
+         for i,v in ipairs(lines) do
+            WindowText(win, font_id, v, GAP*4, (title_height) + (i*line_height), 0, 0, Theme.BODY_TEXT, utf8)
+         end
+      end
+   else
+      y = title_height
+
+      if #group_members > 0 then
+         -- MAIN DISPLAY BODY
+         if ultracompact then
+            draw_ultracompact_format()
+         else
+            draw_original_format()
+         end
+      else
+         txt = "Your group is empty."
+         txtlen = WindowTextWidth(win,font_id, txt)
+         WindowText(win, font_id, txt, (width-txtlen)/2, (height+line_height)/2, 0, 0, Theme.BODY_TEXT, utf8)
+      end
+   end
+
+   Theme.DrawBorder(win)
+   Theme.Draw3DRect(win, -1, -1, WindowInfo(win, 3)-1, title_height, false)
+
+   if group_built then
+      styles = ColoursToStyles(full_group_data.groupname)
+      local x = GAP
+      local y = 2
+      local statusBoundary = math.max(GAP, width-WindowTextWidth(win, font_id, full_group_data.status)-3*GAP)
+      WindowRectOp(win, 2, statusBoundary+2*GAP - 2, y , -3, y+line_height, ((full_group_data.status=="Private" and 0x000088) or 0x008800))
+      WindowText(win, font_id, full_group_data.status, statusBoundary+2*GAP, y, 0, 0, 0xffffff)
+      x = x + WindowText(win, font_id, "Group: ", x, y, statusBoundary, 0, Theme.THREE_D_SURFACE_DETAIL, utf8)
+      local group_width = WindowTextWidth(win, font_id, strip_colours_from_styles(styles))
+      WindowRectOp(win, 2, x-3, y, x+group_width + GAP, y+line_height, Theme.PRIMARY_BODY)
+      Theme.WindowTextFromStyles(win, font_id, styles, x, y, statusBoundary, 0)
+      y = y + line_height
+      local xpKillsBoundary = math.max(GAP,width-WindowTextWidth(win, font_id, "XP:"..full_group_data.exp.." K:"..full_group_data.kills)-3*GAP)
+      WindowText(win, font_id, "XP:"..full_group_data.exp.." K:"..full_group_data.kills, xpKillsBoundary+2*GAP, y, 0,0, Theme.THREE_D_SURFACE_DETAIL, utf8)
+      WindowText(win, font_id, "Leader: "..full_group_data.leader, GAP, y, xpKillsBoundary, 0, Theme.THREE_D_SURFACE_DETAIL, utf8)
+   end
+
+   Theme.AddResizeTag(win, 1, nil, nil, "MouseDown", "ResizeMoveCallback", "ResizeReleaseCallback")
+
+   CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
+end -- Display_Group_Page
+
+
+function draw_ultracompact_format()
+   -- <lvl> <Name, with align colors> <HP bar + overlay numbers> <qt, with colors to show q-status>
+   local num_members = 0
+   local column_width = WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW") + (GAP*4)
+   if gauge_style == 2 then
+      if number_style ~= 3 then
+         column_width = WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWWWWWWWWWW") + (GAP*4)
+      end
+   end
+   for i,v in ipairs(group_members) do
+      num_members = i
+      v.info.lvl = string.lpad(v.info.lvl, 3, ' ')
+      v.namestring = string.rpad(v.name:sub(1, 12), 12, ' ') -- 12 character width
+      if v.info.qs == "1" then
+         v.qtstring = "[Q]"
+      else
+         v.qtstring = "Q:"..string.lpad(v.info.qt, 2, ' ')
+      end
+
+      local base = v.info["hp"]
+      local max = v.info["mhp"]
+      if number_style == 1 then -- STANDARD
+         v["hpstring"] = string.lpad(limit_n(base), 5, ' ')
+      elseif number_style == 2 then -- PERCENTAGES
+         v["hpstring"] = string.lpad(string.format('%d', 100*base/max).."%", 4, ' ')
+      elseif number_style == 3 then -- STANDARD + PERCENTAGES
+         v["hpstring"] = string.lpad(limit_n(base), 5, ' ').." ("..string.lpad(string.format('%d',100*base/max).."%", 4, ' ')..")"
+      end
+   end
+
+   local baseX = GAP
+   local baseY = y+GAP
+   num_columns = math.max(math.floor(width / column_width), 1)
+   members_per_col = math.ceil((num_members)/num_columns)
+
+   -- sort or not
+   if sort_hp_which ~= "" then
+      sortMembers()
+   end
+   if sort_quests == 1 then
+      non_quest = {}
+      quest = {}
+      for i,v in ipairs(group_members) do
+         if v.info.qs == "1" then
+            table.insert(quest, v)
+         else
+            table.insert(non_quest, v)
+         end
+      end
+      group_members = {}
+      for i,v in ipairs(non_quest) do
+         table.insert(group_members, v)
+      end
+      for i,v in ipairs(quest) do
+         table.insert(group_members, v)
+      end
+      non_quest = {}
+      quest = {}
+   end
+
+   for i,v in ipairs(group_members) do
+      if (i ~= 1) and ((i-1) % members_per_col == 0) then
+         baseY = title_height+GAP-1
+         y = baseY
+         baseX = baseX + column_width
+         x = baseX
+      else
+         baseY = y + GAP-1
+         y = baseY
+         x = baseX
+      end
+
+      zeroed_alignment = v.info.align+2500
+      name_colour = ((zeroed_alignment<=1625 and colorVals.Align[1]) or ((zeroed_alignment>=3375 and colorVals.Align[2]) or 0xcecece))
+      bar_width = column_width - GAP*3 - WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWW")
+
+      x = x + WindowText(win, font_id, v.info.lvl.." ", x, y, 0, 0, Theme.BODY_TEXT, utf8)
+      x = x + WindowText(win, font_id, v.namestring, x, y, 0, 0, name_colour, utf8)
+
+      local hpColor1 = colorVals.Health[1]
+      local hpColor2 = colorVals.Health[2]
+      local hp_label_color = Theme.BODY_TEXT
+      local hpPercent = 100
+      if tonumber(v.info.hp) and tonumber(v.info.mhp) then
+         hpPercent = 100 * (tonumber(v.info.hp) / tonumber(v.info.mhp))
+      end
+      if thresh1active == 1 then
+         if hpPercent < thresh1percent then
+            hp_label_color = thresh1color
+            hpColor1 = thresh1color
+            hpColor2 = thresh1color
+         end
+      end
+      if thresh2active == 1 then
+         if hpPercent < thresh2percent then
+            hp_label_color = thresh2color
+            hpColor1 = thresh2color
+            hpColor2 = thresh2color
+         end
+      end
+
+      WindowText(win, font_id, v.qtstring, x+bar_width+(3*GAP), y, 0, 0, Theme.BODY_TEXT, utf8)
+      x = drawGauge("", v.info.hp, v.info.mhp, x, y, bar_width, line_height, hpColor1, hpColor2)
+      drawLabel(x, y, bar_width, v.hpstring, hp_label_color, true)
+      y = y + line_height + 1
+
+      y = y + GAP - 2
+      WindowLine(win, baseX-GAP, y, baseX+column_width-GAP+1, y, Theme.THREE_D_HIGHLIGHT, 0, 1) -- horizontal line
+      WindowLine(win, baseX+column_width-GAP, baseY-GAP+2, baseX+column_width-GAP, y, Theme.THREE_D_HIGHLIGHT, 0, 1) -- vertical line
+   end
+end
+
+function draw_original_format()
+   local num_members = 0
+   local column_width = 0
+   for i,v in ipairs(group_members) do
+      num_members = i
+      v.info.lvl = string.lpad(v.info.lvl, 3, ' ')
+      v.qtstring = ""
+      v.namestring = v.name
+      if (show_quest == 1) or (show_tnl == 1) then
+         v.namestring = string.rpad(v.name:sub(1, 12), 12, ' ') -- 12 character width
+         local txt = ""
+         if show_quest == 1 then
+            if v.info.qs == "1" then
+               txt = txt.."[Q]"
+            else
+               txt = txt.."Q:"..string.lpad(v.info.qt, 2, ' ')
+            end
+            if show_tnl == 1 then
+               txt = txt..", "
+            end
+         end
+         if show_tnl == 1 then 
+            txt = txt.."TNL:"..string.lpad(v.info.tnl, 5, ' ')
+         end
+         v.qtstring = txt
+      end
+
+      for i, s in ipairs({"hp", "mn", "mv"}) do
+         local base = v.info[s]
+         local max = v.info["m"..s]
+         if number_style == 1 then -- STANDARD
+            v[s.."string"] = string.lpad(limit_n(base), 5, ' ').."/"..string.rpad(limit_n(max), 5, ' ')
+         elseif number_style == 2 then -- PERCENTAGES
+            v[s.."string"] = string.lpad(string.format('%d', 100*base/max).."%", 4, ' ')
+         elseif number_style == 3 then -- STANDARD + PERCENTAGES
+            v[s.."string"] = string.lpad(limit_n(base), 5, ' ').."/"..string.rpad(limit_n(max), 5, ' ').." ("..string.lpad(string.format('%d',100*base/max).."%", 4, ' ')..")"
+         end
+      end
+      if gauge_style == 2 then
+         column_width = math.max(column_width, WindowTextWidth(win, font_id, "[]"..v.info.lvl..v.namestring..v.qtstring))
+         if show_hp then
+            column_width = math.max(column_width, labels_width + WindowTextWidth(win, font_id, v.hpstring))
+         end
+         if show_mn then
+            column_width = math.max(column_width, labels_width + WindowTextWidth(win, font_id, v.mnstring))
+         end
+         if show_mv then
+            column_width = math.max(column_width, labels_width + WindowTextWidth(win, font_id, v.mvstring))
+         end
+      end
+   end
+   if column_width == 0 then
+      column_width = WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW") + (GAP*4)
+   else
+      if (show_quest == 1) or (show_tnl == 1) then
+         column_width = column_width + (GAP*4)
+      else
+         column_width = column_width + (GAP*3)
+      end
+   end
+
+   local baseX = GAP
+   local baseY = y+GAP
+   num_columns = math.max(math.floor(width / column_width), 1)
+   members_per_col = math.ceil((num_members)/num_columns)
+   bar_width = column_width - GAP*3 - labels_width
+   if overlay_numbers == 0 and gauge_style ~= 2 then
+      if number_style == 1 then
+         bar_width = bar_width - WindowTextWidth(win, font_id, "88888/88888")
+      elseif number_style == 2 then
+         bar_width = bar_width - WindowTextWidth(win, font_id, "100%")
+      elseif number_style == 3 then
+         bar_width = bar_width - WindowTextWidth(win, font_id, "88888/88888 (100%)")
+      end
+      bar_width = bar_width - GAP
+   end
+
+   -- sort or not
+   if sort_hp_which ~= "" then
+      sortMembers()
+   end
+   if sort_quests == 1 then
+      non_quest = {}
+      quest = {}
+      for i,v in ipairs(group_members) do
+         if v.info.qs == "1" then
+            table.insert(quest, v)
+         else
+            table.insert(non_quest, v)
+         end
+      end
+      group_members = {}
+      for i,v in ipairs(non_quest) do
+         table.insert(group_members, v)
+      end
+      for i,v in ipairs(quest) do
+         table.insert(group_members, v)
+      end
+      non_quest = {}
+      quest = {}
+   end
+
+   for i,v in ipairs(group_members) do
+      if (i ~= 1) and ((i-1) % members_per_col == 0) then
+         baseY = title_height+GAP-1
+         y = baseY
+         baseX = baseX + column_width
+         x = baseX
+      else
+         baseY = y + GAP-1
+         y = baseY
+         x = baseX
+      end
+      -- txt = "["..(("P" and v.info.status.poisoned == true) or "_")..
+      --     (("B" and v.info.status.blind == true) or "_")..
+      --     (("W" and v.info.status.webbed == true) or "_")..
+      --     (("C" and v.info.status.cursed == true) or "_")..
+      --     (("*" and v.info.status.attacked == true) or "_").."]"
+      -- WindowText(win, font_id, txt, x, y, 0, 0, Theme.BODY_TEXT, utf8)
+      -- x = x + math.max(WindowTextWidth(win, font_id, "[PBWC*]"), WindowTextWidth(win, font_id, "[_____]")) + GAP
+      x = x + WindowText(win, font_id, "L"..v.info.lvl.." ", x, y, 0, 0, Theme.BODY_TEXT, utf8)
+      zeroed_alignment = v.info.align+2500
+      name_colour = ((zeroed_alignment<=1625 and colorVals.Align[1]) or ((zeroed_alignment>=3375 and colorVals.Align[2]) or 0xcecece))
+      x = x + WindowText(win, font_id, v.namestring, x, y, 0, 0, name_colour, utf8) + GAP
+
+      WindowText(win, font_id, v.qtstring, x, y, 0, 0, Theme.BODY_TEXT, utf8)
+
+      y = y + line_height + 1
+      if show_hp == 1 then -- HP BAR
+         local hpColor1 = colorVals.Health[1]
+         local hpColor2 = colorVals.Health[2]
+         local hp_label_color = Theme.BODY_TEXT
+         local hpPercent = 100
+         if tonumber(v.info.hp) and tonumber(v.info.mhp) then
+            hpPercent = 100 * (tonumber(v.info.hp) / tonumber(v.info.mhp))
+         end
+         if thresh1active == 1 then
+            if hpPercent < thresh1percent then
+               hp_label_color = thresh1color
+               hpColor1 = thresh1color
+               hpColor2 = thresh1color
+            end
+         end
+         if thresh2active == 1 then
+            if hpPercent < thresh2percent then
+               hp_label_color = thresh2color
+               hpColor1 = thresh2color
+               hpColor2 = thresh2color
+            end
+         end
+         x = drawGauge("HP", v.info.hp, v.info.mhp, baseX, y, bar_width, line_height, hpColor1, hpColor2)
+         drawLabel(x, y, bar_width, v.hpstring, hp_label_color, overlay_numbers)
+         y = y + line_height + 1
+      end
+
+      if show_mn == 1 then-- MANA BAR
+         x = drawGauge("MN", v.info.mn, v.info.mmn, baseX, y, bar_width, line_height, colorVals.Mana[1], colorVals.Mana[2])
+         drawLabel(x, y, bar_width, v.mnstring, Theme.BODY_TEXT, overlay_numbers)
+         y = y + line_height + 1
+      end
+
+      if show_mv == 1 then -- MOVES BAR
+         x = drawGauge("MV", v.info.mv, v.info.mmv, baseX, y, bar_width, line_height, colorVals.Moves[1], colorVals.Moves[2], Theme.BODY_TEXT, overlay_numbers)
+         drawLabel(x, y, bar_width, v.mvstring, Theme.BODY_TEXT, overlay_numbers)
+         y = y + line_height + 1
+      end
+      y = y + GAP - 2
+      WindowLine(win, baseX-GAP, y, baseX+column_width-GAP+1, y, Theme.THREE_D_HIGHLIGHT, 0, 1) -- horizontal line
+      WindowLine(win, baseX+column_width-GAP, baseY-GAP+2, baseX+column_width-GAP, y, Theme.THREE_D_HIGHLIGHT, 0, 1) -- vertical line
+   end
+end
+
+function validate_percent(input)
+   if string.sub(input, -1) == "%" then
+      input = string.sub(input, 1,-2)
+   end
+   local inputNum = tonumber(input)
+   if not inputNum or inputNum < 1 or inputNum > 100 or inputNum % 1 ~= 0 then
+      ColourNote("white","red","'"..input.."' is not a whole number between 1 and 100. Try again.")
+      return false
+   end
+   return true
+end
+
+function right_click_menu ()
+   local menustring ="!"..(ultracompact and "+" or "").."Ultracompact Mode|-|Change Font|>Show Players|"..((show_self==1 and "+") or "").."Include Self|"..((in_room==1 and "+") or "").."Same Room|-|All Others|No Others|Others In The Room Right Now|-|"
+   local member_count = 0
+   local member_names = {}
+   if full_group_data and full_group_data.members and char_data and char_data.name then
+      for i,v in ipairs(full_group_data.members) do
+         if v.name ~= char_data.name then
+            menustring = menustring..(((hidden_members[v.name] == nil) and "+") or "")..v.name.."|"
+            member_count = member_count + 1
+            table.insert(member_names, v.name)
+         end
+      end
+   end
+   if ultracompact then
+      ultracompact_right_click_menu(menustring, member_count, member_names)
+   else
+      full_right_click_menu(menustring, member_count, member_names)
+   end
+end -- right_click_menu
+
+
+function toggle_compact()
+   ultracompact = not ultracompact
+   -- save and reload
+   SaveState()
+   RemoveMembersFromGroupDisplay()
+   OnPluginInstall()
+end
+
+function ultracompact_right_click_menu (menustring, member_count, member_names)
+   menustring = menustring.."<|-|>Configure Colors|>Health|Gauge Main|Gauge Border|<|>Align|Evil|Good|<|<|"
+
+   menustring = menustring.."-|"
+   menustring = menustring..">Gauge Style|"
+   menustring = menustring..((gauge_style==2 and "+") or "").."No Gauges|"
+   menustring = menustring..((gauge_style==1 and "+") or "").."Flat Gauges|"
+   menustring = menustring..((gauge_style==0 and "+") or "").."3D Gauges|"
+   menustring = menustring.."<|"
+   menustring = menustring..">Number Style|"
+   menustring = menustring..((number_style==1 and "+") or "").."Standard|"
+   menustring = menustring..((number_style==2 and "+") or "").."Percentages|"
+   menustring = menustring..((number_style==3 and "+") or "").."Standard+Percentages|"
+   menustring = menustring.."<|-|>HP Thresholds|>First|"..(((thresh1active == 1) and "+") or "").."Activate|Set Percent ("..thresh1percent.."%)|Set Gauge Color ("..RGBColourToName(thresh1color)..")|<|>Second|"..(((thresh2active == 1) and "+") or "").."Activate|Set Percent ("..thresh2percent.."%)|Set Gauge Color ("..RGBColourToName(thresh2color)..")|<|<|>Sort By...|"..((sort_hp_which == "percent") and "+" or "").."% Damage|"..((sort_hp_which == "total") and "+" or "").."Total Damage|-|"..((sort_quests == 1) and "+" or "").."Players On Quests Go Last|<|-|Bring To Front|Send To Back|-|Reset Defaults"
+
+   local result = WindowMenu (win,
+      WindowInfo (win, 14),  -- x position
+      WindowInfo (win, 15),   -- y position
+      menustring
+   )
+
+   if result ~= "" then
+      local numResult = tonumber(result)
+      if numResult == 1 then
+         toggle_compact()
+         return
+      else
+         numResult = numResult - 1
+      end
+
+      if numResult == 1 then
+         -- change font
+         wanted_font = utils.fontpicker (font_name, font_size) --font dialog
+         if wanted_font then
+            font_name = wanted_font.name
+            font_size = wanted_font.size
+         end
+      elseif numResult == 2 then
+         -- show/hide self
+         show_self = (((show_self == 0) and 1) or 0)
+         if (show_self == 0) then
+            ColourNote("yellow", "", "You will no longer see your own status in the group monitor.")
+         else
+            ColourNote("yellow", "", "You will now see your own status in the group monitor.")
+         end
+      elseif numResult == 3 then
+         toggleInRoom()
+      elseif numResult == 4 then
+         -- remove all from the hidden list
+         showAllMembers()
+      elseif numResult == 5 then
+         -- add all to the hidden list
+         hideAllMembers()
+      elseif numResult == 6 then
+         -- add players outside the room to the hidden list
+         setToRoom()
+      elseif numResult >= 7 and numResult <= member_count+6 then
+         -- add/remove members in the hidden list
+         local adjustedNumResult = numResult - 6
+         hidden_members[member_names[adjustedNumResult]] = (((hidden_members[member_names[adjustedNumResult]]== nil) and true) or nil)
+      elseif numResult == member_count+7 or numResult == member_count+8 then
+         -- change hp color settings
+         local colourIndex = 2
+         if ((numResult-member_count-6) % 2 == 1) then
+            colourIndex = 1
+         end
+         local newcolour = PickColour (colorVals["Health"][colourIndex])
+         if newcolour ~= -1 then
+            colorVals["Health"][colourIndex] = newcolour
+         end
+      elseif numResult == member_count+9 or numResult == member_count+10 then
+         -- change align color settings
+         local colourIndex = 2
+         if ((numResult-member_count-6) % 2 == 1) then
+            colourIndex = 1
+         end
+         local newcolour = PickColour (colorVals["Align"][colourIndex])
+         if newcolour ~= -1 then
+            colorVals["Align"][colourIndex] = newcolour
+         end
+
+      elseif numResult == member_count+11 then
+         -- no gauges
+         gauge_style = 2
+      elseif numResult == member_count+12 then
+         -- flat gauges
+         gauge_style = 1
+      elseif numResult == member_count+13 then
+         -- shaded gauges
+         gauge_style = 0
+      elseif numResult == member_count+14 then
+         -- standard
+         number_style = 1
+      elseif numResult == member_count+15 then
+         -- percentages
+         number_style = 2
+      elseif numResult == member_count+16 then
+         -- standard+percentages
+         number_style = 3
+      elseif numResult == member_count+17 then
+         thresh1active = (((thresh1active == 0) and 1) or 0)
+      elseif numResult == member_count+18 then
+         local perc = utils.inputbox( "I want the HP bars to change color when they drop below this percent...\n(enter a whole number between 1 and 100)", "Group Monitor HP Threshold #1", thresh1percent, nil, nil, {validate=validate_percent})
+         if perc then
+            if string.sub(perc, -1) == "%" then
+               perc = string.sub(perc, 1,-2)
+            end
+            thresh1percent = tonumber(perc)
+         end
+      elseif numResult == member_count+19 then
+         local newColor = PickColour (thresh1color)
+         if newcolor ~= -1 then
+            thresh1color = newColor
+         end
+      elseif numResult == member_count+20 then
+         thresh2active = (((thresh2active == 0) and 1) or 0)
+      elseif numResult == member_count+21 then
+         local perc = utils.inputbox( "I want the HP bars to change color when they drop below this percent...\n(enter a whole number between 1 and 100)", "Group Monitor HP Threshold #2", thresh2percent, nil, nil, {validate=validate_percent})
+         if perc then
+            if string.sub(perc, -1) == "%" then
+               perc = string.sub(perc, 1,-2)
+            end
+            thresh2percent = tonumber(perc)
+         end
+      elseif numResult == member_count+22 then
+         local newColor = PickColour (thresh2color)
+         if newcolor ~= -1 then
+            thresh2color = newColor
+         end
+      elseif numResult == member_count+23 then
+         -- sort by % damage
+         if sort_hp_which == "percent" then -- current sort so disable
+            sort_hp_which = ""
+         else
+            sort_hp_which = "percent"
+         end
+      elseif numResult == member_count+24 then
+         -- sort by total damage
+         if sort_hp_which == "total" then -- current sort so disable
+            sort_hp_which = ""
+         else
+            sort_hp_which = "total"
+         end
+      elseif numResult == member_count+25 then
+         -- Players On Quests Go Last
+         if sort_quests == 1 then
+            sort_quests = 0
+         else
+            sort_quests = 1
+         end
+      elseif numResult == member_count+26 then
+         -- bring to front
+         CallPlugin("462b665ecb569efbf261422f","boostMe", win)
+      elseif numResult == member_count+27 then
+         -- send to back
+         CallPlugin("462b665ecb569efbf261422f","dropMe", win)
+      elseif numResult == member_count+28 then
+         -- reset
+         font_name        = default_font_name
+         font_size        = default_font_size
+         height           = default_height
+         width            = default_width
+         show_coords      = 0
+         WindowResize(win, width, height, Theme.PRIMARY_BODY)
+      end -- if
+
+      -- save and reload
+      SaveState()
+      RemoveMembersFromGroupDisplay()
+      OnPluginInstall()
+   end
+end
+
+function full_right_click_menu (menustring, member_count, member_names)
+   menustring = menustring.."<|-|>Configure Colors|>Health|Gauge Main|Gauge Border|<|>Mana|Gauge Main|Gauge Border|<|>Moves|Gauge Main|Gauge Border|<|>Align|Evil|Good|<|<|"
+   menustring = menustring..">Show Info|"
+   menustring = menustring..((show_hp==1 and "+") or "").."Health|"
+   menustring = menustring..((show_mn==1 and "+") or "").."Mana|"
+   menustring = menustring..((show_mv==1 and "+") or "").."Moves|"
+   menustring = menustring..((show_quest==1 and "+") or "").."Quest Time|"
+   menustring = menustring..((show_tnl==1 and "+") or "").."TNL|"
+   menustring = menustring.."<|"
+
+   menustring = menustring.."-|"
+   menustring = menustring..">Gauge Style|"
+   menustring = menustring..((gauge_style==2 and "+") or "").."No Gauges|"
+   menustring = menustring..((gauge_style==1 and "+") or "").."Flat Gauges|"
+   menustring = menustring..((gauge_style==0 and "+") or "").."3D Gauges|"
+   menustring = menustring.."<|"
+   menustring = menustring..">Number Style|"
+   menustring = menustring..((overlay_numbers==1 and "+") or "").."Overlaid on Gauges|"
+   menustring = menustring.."-|"
+   menustring = menustring..((number_style==1 and "+") or "").."Standard|"
+   menustring = menustring..((number_style==2 and "+") or "").."Percentages|"
+   menustring = menustring..((number_style==3 and "+") or "").."Standard+Percentages|"
+   menustring = menustring.."<|-|>HP Thresholds|>First|"..(((thresh1active == 1) and "+") or "").."Activate|Set Percent ("..thresh1percent.."%)|Set Gauge Color ("..RGBColourToName(thresh1color)..")|<|>Second|"..(((thresh2active == 1) and "+") or "").."Activate|Set Percent ("..thresh2percent.."%)|Set Gauge Color ("..RGBColourToName(thresh2color)..")|<|<|>Sort By...|"..((sort_hp_which == "percent") and "+" or "").."% Damage|"..((sort_hp_which == "total") and "+" or "").."Total Damage|-|"..((sort_quests == 1) and "+" or "").."Players On Quests Go Last|<|-|Bring To Front|Send To Back|-|Reset Defaults"
+
+   local result = WindowMenu (win,
+      WindowInfo (win, 14),  -- x position
+      WindowInfo (win, 15),   -- y position
+      menustring
+   )
+
+   if result ~= "" then
+      local numResult = tonumber(result)
+      if numResult == 1 then
+         toggle_compact()
+         return
+      else
+         numResult = numResult - 1
+      end
+
+      if numResult == 1 then
+         -- change font
+         wanted_font = utils.fontpicker (font_name, font_size) --font dialog
+         if wanted_font then
+            font_name = wanted_font.name
+            font_size = wanted_font.size
+         end
+      elseif numResult == 2 then
+         -- show/hide self
+         show_self = (((show_self == 0) and 1) or 0)
+         if (show_self == 0) then
+            ColourNote("yellow", "", "You will no longer see your own status in the group monitor.")
+         else
+            ColourNote("yellow", "", "You will now see your own status in the group monitor.")
+         end
+      elseif numResult == 3 then
+         toggleInRoom()
+      elseif numResult == 4 then
+         -- remove all from the hidden list
+         showAllMembers()
+      elseif numResult == 5 then
+         -- add all to the hidden list
+         hideAllMembers()
+      elseif numResult == 6 then
+         -- add players outside the room to the hidden list
+         setToRoom()
+      elseif numResult >= 7 and numResult <= member_count+6 then
+         -- add/remove members in the hidden list
+         local adjustedNumResult = numResult - 6
+         hidden_members[member_names[adjustedNumResult]] = (((hidden_members[member_names[adjustedNumResult]]== nil) and true) or nil)
+      elseif numResult >= member_count+7 and numResult <= member_count+14 then
+         -- change color settings
+         local adjustedNumResult = numResult-member_count-6
+         local colourIndex = 2
+         if (adjustedNumResult % 2 == 1) then
+            colourIndex = 1
+         end
+         local newcolour = PickColour (colorVals[barIndex[math.ceil(adjustedNumResult/2)]][colourIndex])
+         if newcolour ~= -1 then
+            colorVals[barIndex[math.ceil(adjustedNumResult/2)]][colourIndex] = newcolour
+         end
+      elseif numResult == member_count+15 then
+         -- show/hide HP info
+         show_hp = (((show_hp == 0) and 1) or 0)
+         if (show_hp == 0) then
+            ColourNote("yellow", "", "You will no longer see HP info in the group monitor.")
+         else
+            ColourNote("yellow", "", "You will now see HP info in the group monitor.")
+         end
+      elseif numResult == member_count+16   then
+         -- show/hide MANA info
+         show_mn = (((show_mn == 0) and 1) or 0)
+         if (show_mn == 0) then
+            ColourNote("yellow", "", "You will no longer see MN info in the group monitor.")
+         else
+            ColourNote("yellow", "", "You will now see MN info in the group monitor.")
+         end
+      elseif numResult == member_count+17 then
+         -- show/hide MOVES info
+         show_mv = (((show_mv == 0) and 1) or 0)
+         if (show_mv == 0) then
+            ColourNote("yellow", "", "You will no longer see MV info in the group monitor.")
+         else
+            ColourNote("yellow", "", "You will now see MV info in the group monitor.")
+         end
+      elseif numResult == member_count+18 then
+         -- show/hide QT info
+         show_quest = (((show_quest == 0) and 1) or 0)
+         if (show_quest == 0) then
+            ColourNote("yellow", "", "You will no longer see Quest Time info in the group monitor.")
+         else
+            ColourNote("yellow", "", "You will now see Quest Time info in the group monitor.")
+         end
+      elseif numResult == member_count+19 then
+         -- show/hide TNL info
+         show_tnl = (((show_tnl == 0) and 1) or 0)
+         if (show_tnl == 0) then
+            ColourNote("yellow", "", "You will no longer see TNL info in the group monitor.")
+         else
+            ColourNote("yellow", "", "You will now see TNL info in the group monitor.")
+         end
+      elseif numResult == member_count+20 then
+         -- no gauges
+         gauge_style = 2
+      elseif numResult == member_count+21 then
+         -- flat gauges
+         gauge_style = 1
+      elseif numResult == member_count+22 then
+         -- shaded gauges
+         gauge_style = 0
+      elseif numResult == member_count+23 then
+         overlay_numbers = (((overlay_numbers == 0) and 1) or 0)
+      elseif numResult == member_count+24 then
+         -- standard
+         number_style = 1
+      elseif numResult == member_count+25 then
+         -- percentages
+         number_style = 2
+      elseif numResult == member_count+26 then
+         -- standard+percentages
+         number_style = 3
+      elseif numResult == member_count+27 then
+         thresh1active = (((thresh1active == 0) and 1) or 0)
+      elseif numResult == member_count+28 then
+         local perc = utils.inputbox( "I want the HP bars to change color when they drop below this percent...\n(enter a whole number between 1 and 100)", "Group Monitor HP Threshold #1", thresh1percent, nil, nil, {validate=validate_percent})
+         if perc then
+            if string.sub(perc, -1) == "%" then
+               perc = string.sub(perc, 1,-2)
+            end
+            thresh1percent = tonumber(perc)
+         end
+      elseif numResult == member_count+29 then
+         local newColor = PickColour (thresh1color)
+         if newcolor ~= -1 then
+            thresh1color = newColor
+         end
+      elseif numResult == member_count+30 then
+         thresh2active = (((thresh2active == 0) and 1) or 0)
+      elseif numResult == member_count+31 then
+         local perc = utils.inputbox( "I want the HP bars to change color when they drop below this percent...\n(enter a whole number between 1 and 100)", "Group Monitor HP Threshold #2", thresh2percent, nil, nil, {validate=validate_percent})
+         if perc then
+            if string.sub(perc, -1) == "%" then
+               perc = string.sub(perc, 1,-2)
+            end
+            thresh2percent = tonumber(perc)
+         end
+      elseif numResult == member_count+32 then
+         local newColor = PickColour (thresh2color)
+         if newcolor ~= -1 then
+            thresh2color = newColor
+         end
+      elseif numResult == member_count+33 then
+         -- sort by % damage
+         if sort_hp_which == "percent" then -- current sort so disable
+            sort_hp_which = ""
+         else
+            sort_hp_which = "percent"
+         end
+      elseif numResult == member_count+34 then
+         -- sort by total damage
+         if sort_hp_which == "total" then -- current sort so disable
+            sort_hp_which = ""
+         else
+            sort_hp_which = "total"
+         end
+      elseif numResult == member_count+35 then
+         -- Players On Quests Go Last
+         if sort_quests == 1 then
+            sort_quests = 0
+         else
+            sort_quests = 1
+         end
+      elseif numResult == member_count+36 then
+         -- bring to front
+         CallPlugin("462b665ecb569efbf261422f","boostMe", win)
+      elseif numResult == member_count+37 then
+         -- send to back
+         CallPlugin("462b665ecb569efbf261422f","dropMe", win)
+      elseif numResult == member_count+38 then
+         -- reset
+         font_name        = default_font_name
+         font_size        = default_font_size
+         height           = default_height
+         width            = default_width
+         show_coords      = 0
+         WindowResize(win, width, height, Theme.PRIMARY_BODY)
+      end -- if
+
+      -- save and reload
+      SaveState()
+      RemoveMembersFromGroupDisplay()
+      OnPluginInstall()
+   end
+end
+
+invitations = {}
+
+function group_invite(name, line, wildcards, styles)
+   invitations[wildcards[1]]=wildcards[2]
+   DisplayGroupPage()
+end
+
+function group_cancel(name, line, wildcards, styles)
+   invitations[wildcards[1]] = nil
+   DisplayGroupPage()
+end
+
+---------- taken from Gofer
+
+function showPlayer( name, line, wildcards )
+   ColourNote("yellow", "", "Player "..wildcards[1].." will be shown in the group monitor window.")
+   hidden_members[ wildcards[1] ] = nil
+   -- save and reload
+   SaveState()
+   RemoveMembersFromGroupDisplay()
+   OnPluginInstall()
+end
+
+function hidePlayer( name, line, wildcards )
+   ColourNote("yellow", "", "Player "..wildcards[1].." will be hidden from the group monitor window.")
+   hidden_members[ wildcards[1] ] = true
+   -- save and reload
+   SaveState()
+   RemoveMembersFromGroupDisplay()
+   OnPluginInstall()
+end
+
+function toggleInRoom()
+   in_room = (((in_room == 0) and 1) or 0)
+   if (in_room == 0) then
+      ColourNote("yellow", "", "You will now track group members everywhere.")
+   else
+      ColourNote("yellow", "", "You will now track group members in the same room as you.")
+   end
+   -- save and reload
+   SaveState()
+   RemoveMembersFromGroupDisplay()
+   OnPluginInstall()
+end
+
+function setToRoom()
+   ColourNote("yellow", "", "Tracking group members who are in the room right now.")
+   in_room = 0
+   if (full_group_data ~= nil) then
+      for i,v in ipairs(full_group_data.members) do
+         if v.info.here == "0" then
+            hidden_members[v.name] = true
+         end
+      end
+   end
+   -- save and reload
+   SaveState()
+   RemoveMembersFromGroupDisplay()
+   OnPluginInstall()
+end
+
+---------- end from Gofer
+
+
+--=================================================================================
+-- Called when plugin receives telnet data - main entry point for actually running
+-- the plugin.
+--=================================================================================
+function OnPluginBroadcast (msg, id, name, text)
+   -- Look for GMCP handler.
+   if (id == '3e7dedbe37e44942dd46d264') then
+      if (text == 'reload') then
+         -- invalidate current data
+         group_built = false
+         self_built = false
+         return
+      end
+
+      if (text=="char.base") then
+         char_data = gmcp("char.base")
+         self_built = true
+         if group_built then
+            RemoveMembersFromGroupDisplay()
+            DisplayGroupPage()
+         end
+      end
+
+      if (text == "group") then
+         full_group_data = gmcp("group")
+         if (full_group_data.groupname == "") then
+            leaveGroup()
+         else
+            group_built = true
+            if self_built then
+               RemoveMembersFromGroupDisplay()
+               DisplayGroupPage()
+            else
+               Send_GMCP_Packet("request char")
+            end
+         end
+      end
+   elseif (id == "462b665ecb569efbf261422f" and msg==996 and text == "re-register z") then
+      CallPlugin("462b665ecb569efbf261422f", "registerMiniwindow", win)
+   end
+end
+
+function ResizeMoveCallback()
+   if GetPluginVariable("c293f9e7f04dde889f65cb90", "lock_down_miniwindows") == "1" then
+      return
+   end
+   posx, posy = WindowInfo (win, 17), WindowInfo (win, 18)
+   width = width + posx - startx
+   startx = posx
+   if (width < MIN_SIZE) then
+      width = MIN_SIZE
+      startx = windowinfo.window_left+width
+   elseif (windowinfo.window_left+width > GetInfo(281)) then
+      width = GetInfo(281)-windowinfo.window_left
+      startx = GetInfo(281)
+   end
+
+   height = height + posy - starty
+   starty = posy
+   local min_lines = 1
+   if show_hp == 1 then
+      min_lines = min_lines + 1
+   end
+   if show_mn == 1 then
+      min_lines = min_lines + 1
+   end
+   if show_mv == 1 then
+      min_lines = min_lines + 1
+   end
+   if (height < title_height+(min_lines*line_height)+(2*GAP)+min_lines-1) then
+      height = title_height+(min_lines*line_height)+(2*GAP)+min_lines-1
+      starty = windowinfo.window_top+height
+   elseif (windowinfo.window_top+height > GetInfo(280)) then
+      height = GetInfo(280)-windowinfo.window_top
+      starty = GetInfo(280)
+   end
+   if (utils.timer() - lastRefresh > 0.0333) then
+      SetUpHotspotsAndDraw(false)
+      lastRefresh = utils.timer()
+   end
+end
+
+lastRefresh = 0
+
+function ResizeReleaseCallback()
+   SetUpHotspotsAndDraw(true)
+end
+
+function MouseDown(flags, hotspot_id)
+   if (hotspot_id == win.."_resize") then
+      startx, starty = WindowInfo (win, 17), WindowInfo (win, 18)
+   end
+end
+
+function CancelMouseOver (flags, hotspotid)
+end -- cancelmouseover
+
+function CancelMouseDown(flags, hotspot_id)
+end
+
+function MouseUp(flags, hotspot_id, win)
+   if bit.band (flags, miniwin.hotspot_got_rh_mouse) ~= 0 then
+      right_click_menu()
+   end
+   return true
+end
+
+function LeftClickOnly(flags, hotspot_id, win)
+   if bit.band (flags, miniwin.hotspot_got_rh_mouse) ~= 0 then
+      return true
+   end
+   return false
+end
+
+function leaveGroup ()
+   invitations = {}
+   group_built = false
+   full_group_data = nil
+   SetUpHotspotsAndDraw(true)
+end
+
+function OnPluginConnect()
+   --Send_GMCP_Packet("rawcolor on")
+   --Send_GMCP_Packet("group on")
+end
+
+function OnPluginSaveState()
+   -- save window current location for next time
+   movewindow.save_state(win)
+
+   SetVariable("enabled", tostring(GetPluginInfo(GetPluginID (), 17)))
+   if WindowInfo(win, 3) and WindowInfo(win, 4) then
+      width = WindowInfo(win, 3)
+      height = WindowInfo(win, 4)
+   end
+   SetVariable("width", width)
+   SetVariable("height", height)
+   SetVariable("font_name", font_name)
+   SetVariable("font_size", font_size)
+   SetVariable("show_self", show_self)
+   SetVariable("in_room", in_room)
+   SetVariable("show_hp", show_hp)
+   SetVariable("show_mn", show_mn)
+   SetVariable("show_mv", show_mv)
+   SetVariable("show_quest", show_quest)
+   SetVariable("show_tnl", show_tnl)
+   SetVariable("sort_hp_which", sort_hp_which)
+   SetVariable("sort_quests", sort_quests)
+   SetVariable("hidden", hidden)
+   SetVariable("colorVals", serialize.save ("colorVals"))
+   SetVariable("gauge_style", gauge_style)
+   SetVariable("number_style", number_style)
+   SetVariable("overlay_numbers", overlay_numbers)
+   SetVariable("thresh1active", thresh1active)
+   SetVariable("thresh2active", thresh2active)
+   SetVariable("thresh1percent", thresh1percent)
+   SetVariable("thresh2percent", thresh2percent)
+   SetVariable("thresh1color", thresh1color)
+   SetVariable("thresh2color", thresh2color)
+   SetVariable("ultracompact", ultracompact and "1" or "0")
+end -- OnPluginSaveState
+
+function OnPluginClose()
+   OnPluginDisable()
+   WindowDelete(win)
+end
+
+function HideIt()
+   WindowShow( win, false )
+   hidden = 1
+   SaveState()
+end
+
+function ShowIt()
+   WindowShow (win, true)
+   hidden = 0
+   SaveState()
+end
+
+function OnPluginDisable ()
+   SaveState()
+   WindowShow(win, false)
+end --  OnPluginDisable
+
+function OnPluginEnable ()
+   if hidden == 0 then
+      WindowShow (win, true)
+   end
+   if IsConnected() then
+      OnPluginConnect()
+   end
+   SaveState()
+end -- OnPluginEnable
+
+win = GetPluginID()
+function OnPluginListChanged ()
+   
+end
+
+function OnPluginInstall()
+
+   local fonts = utils.getfontfamilies ()
+
+   -- if Dina not there already, add it
+   if not fonts.Dina then
+      AddFont (GetInfo (66) .. "\\Dina.fon")
+      fonts = utils.getfontfamilies ()
+   end
+
+   if fonts ["Dina"] then
+      default_font_size = 8
+      default_font_name = "Dina"
+   elseif fonts["Courier New"] then
+      default_font_size = 9
+      default_font_name = "Courier New"
+   else
+      default_font_size = 9
+      default_font_name = "Lucida Console"
+   end
+
+   font_id = "font"
+   font_name = GetVariable("font_name") or default_font_name
+   font_size = tonumber(GetVariable("font_size")) or default_font_size
+
+   windowinfo = movewindow.install(win, miniwin.pos_center, miniwin.create_absolute_location, false, nil, {mouseup=MouseUp, mousedown=LeftClickOnly, dragmove=LeftClickOnly, dragrelease=LeftClickOnly},{x=default_x, y=default_y})
+   WindowCreate(win, windowinfo.window_left, windowinfo.window_top, width, height, windowinfo.window_mode, windowinfo.window_flags, Theme.SECONDARY_BODY)
+   WindowFont(win, font_id, font_name, font_size, false, false, false, false, 0) -- normal font
+
+   labels_width = math.max(WindowTextWidth(win, font_id, "HP"), WindowTextWidth(win, font_id, "MN"), WindowTextWidth(win, font_id, "MV"))
+
+   --- Grab font size settings.
+   line_height = WindowFontInfo (win, font_id, 1) -  WindowFontInfo (win, font_id, 4) + 2
+   title_height = line_height*2+4
+
+   if IsConnected() then
+      OnPluginConnect()
+      Send_GMCP_Packet("request group")
+   end
+
+   -- if disabled last time, stay disabled
+   if GetVariable ("enabled") == "false" then
+      ColourNote ("yellow", "", "Warning: Plugin " .. GetPluginName ().. " is currently disabled.")
+      check (EnablePlugin(GetPluginID (), false))
+      return
+   end -- they didn't enable us last time
+
+   -- Draw the initial group window
+   SetUpHotspotsAndDraw(true)
+end
+
+function getmemoryusage()
+  collectgarbage('collect')
+  return collectgarbage('count')
+end
+
+]]>
+
+</script>
+</muclient>

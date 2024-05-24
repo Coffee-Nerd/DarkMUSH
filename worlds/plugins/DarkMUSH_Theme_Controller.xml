@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<muclient>
+<plugin
+   name="DarkMUSH_Theme_Controller"
+   author="Fiendish"
+   id="b9315e040989d3f81f4328d6"
+   language="Lua"
+   purpose="Manages activating color themes"
+   requires="5.05"
+   save_state="y"
+>
+</plugin>
+
+<aliases>
+
+<alias
+   script="choose_theme"
+   match="aard theme change"
+   enabled="y"
+   sequence="100"
+   ignore_case="y"
+></alias>
+
+</aliases>
+
+<script>
+<![CDATA[
+
+require "mw_theme_base"
+
+theme_file = GetVariable("theme_file") or Theme.theme_file
+SetVariable("theme_file", theme_file)
+
+function list_themes()
+   t, e = utils.readdir(Theme.theme_dir.."*.lua")
+   local res = {}
+   for filename,v in pairs(t) do
+      if Theme.theme_has_bad_sha(filename) then
+         os.remove(Theme.theme_dir..filename)
+      else
+         res[filename] = filename:gsub("%.lua", ""):gsub("_", " ")
+      end
+   end
+   return res
+end
+
+function apply_theme(theme)
+   CallPlugin("abc1a0944ae4af7586ce88dc", "pause") -- repaint buffer plugin
+   for _, pid in ipairs(GetPluginList()) do
+      if (pid ~= GetPluginID()) and GetPluginInfo(pid, 17) and (PluginSupports(pid, "Theme.b9315e040989d3f81f4328d6") == error_code.eOK) then
+         local _, t = CallPlugin(pid, "Theme.get_theme")
+         if t ~= theme then
+            local a, b = CallPlugin(pid, "OnPluginThemeChange")
+            if not ((a == error_code.eOK) and b) then
+               CallPlugin(pid, "Theme.just_reloading")
+               ReloadPlugin(pid)
+            end
+         end
+      end
+   end
+   CallPlugin("abc1a0944ae4af7586ce88dc", "resume") -- repaint buffer plugin
+end
+
+function choose_theme()
+   res = utils.listbox("Which theme would you like to use?\r\n\r\nDo you have a custom theme that you want to share? Send it to Fiendish!", "Choose Theme", list_themes(), theme_file)
+   if res then
+      theme_file = res
+      SetVariable("theme_file", theme_file)
+      apply_theme(theme_file)
+   end
+end
+
+function OnPluginListChanged()
+   apply_theme(theme_file)
+end
+
+]]>
+</script>
+</muclient>

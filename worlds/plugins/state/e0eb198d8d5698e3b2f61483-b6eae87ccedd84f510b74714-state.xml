@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!-- MuClient version 5.07-pre -->
+<!-- Written by Nick Gammon -->
+<!-- Home Page: http://www.mushclient.com/ -->
+
+<!-- Plugin state saved. Plugin: "DarkMUSH_GMCP_Mapper". World: "Dark Wizardry". -->
+
+<muclient>
+
+<!-- variables -->
+
+<variables
+   muclient_version="5.07-pre"
+   world_file_version="15"
+  >
+  <variable name="DISTANCE_TO_NEXT_ROOM">18</variable>
+  <variable name="ROOM_SIZE">22</variable>
+  <variable name="auto_backup_count">20</variable>
+  <variable name="backup_timer_enabled">1</variable>
+  <variable name="compact_mode">0</variable>
+  <variable name="config"></variable>
+  <variable name="configs">configs = {
+  SHOW_AREA_EXITS = false,
+  FONT = {
+    name = "Dina",
+    size = 8,
+    },
+  SCAN = {
+    depth = 300,
+    },
+  WINDOW = {
+    width = 244,
+    height = 285,
+    },
+  USE_TEXTURES = {
+    enabled = true,
+    },
+  SHOW_ROOM_ID = false,
+  }</variable>
+  <variable name="db_name">Dark Wizardry</variable>
+  <variable name="echo_prefix"></variable>
+  <variable name="enabled">true</variable>
+  <variable name="last_auto_backup">1716433873</variable>
+  <variable name="mw_b6eae87ccedd84f510b74714_mapper_windowx">731</variable>
+  <variable name="mw_b6eae87ccedd84f510b74714_mapper_windowy">1</variable>
+  <variable name="quick_mode">1</variable>
+  <variable name="shownotes">1</variable>
+  <variable name="window_hidden">0</variable>
+</variables>
+</muclient>

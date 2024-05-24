@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!-- MuClient version 5.07-pre -->
+<!-- Written by Nick Gammon -->
+<!-- Home Page: http://www.mushclient.com/ -->
+
+<!-- Plugin state saved. Plugin: "DarkMUSH_Soundpack". World: "Dark Wizardry". -->
+
+<muclient>
+
+<!-- variables -->
+
+<variables
+   muclient_version="5.07-pre"
+   world_file_version="15"
+  >
+  <variable name="aarch_prof_panning">0</variable>
+  <variable name="aarch_prof_volume">100</variable>
+  <variable name="answer_panning">0</variable>
+  <variable name="answer_volume">100</variable>
+  <variable name="auction_panning">0</variable>
+  <variable name="auction_volume">100</variable>
+  <variable name="barter_panning">0</variable>
+  <variable name="barter_volume">100</variable>
+  <variable name="bonus_item_panning">0</variable>
+  <variable name="bonus_item_volume">100</variable>
+  <variable name="channel_off_panning">0</variable>
+  <variable name="channel_off_volume">100</variable>
+  <variable name="channel_on_panning">0</variable>
+  <variable name="channel_on_volume">100</variable>
+  <variable name="claninfo_panning">0</variable>
+  <variable name="claninfo_volume">100</variable>
+  <variable name="clantalk_panning">0</variable>
+  <variable name="clantalk_volume">100</variable>
+  <variable name="cp_mob_dead_panning">0</variable>
+  <variable name="cp_mob_dead_volume">100</variable>
+  <variable name="curse_panning">0</variable>
+  <variable name="curse_volume">100</variable>
+  <variable name="death_panning">0</variable>
+  <variable name="death_volume">100</variable>
+  <variable name="debate_panning">0</variable>
+  <variable name="debate_volume">100</variable>
+  <variable name="debug">0</variable>
+  <variable name="double_end_panning">0</variable>
+  <variable name="double_end_volume">100</variable>
+  <variable name="double_exp_panning">0</variable>
+  <variable name="double_exp_volume">100</variable>
+  <variable name="epics_panning">0</variable>
+  <variable name="epics_volume">100</variable>
+  <variable name="follow_panning">0</variable>
+  <variable name="follow_volume">100</variable>
+  <variable name="ftalk_panning">0</variable>
+  <variable name="ftalk_volume">100</variable>
+  <variable name="gametalk_panning">0</variable>
+  <variable name="gametalk_volume">100</variable>
+  <variable name="gclan_panning">0</variable>
+  <variable name="gclan_volume">100</variable>
+  <variable name="gossip_panning">0</variable>
+  <variable name="gossip_volume">100</variable>
+  <variable name="gq_mob_dead_panning">0</variable>
+  <variable name="gq_mob_dead_volume">100</variable>
+  <variable name="gq_win_panning">0</variable>
+  <variable name="gq_win_volume">100</variable>
+  <variable name="gquest_declare_panning">0</variable>
+  <variable name="gquest_declare_volume">100</variable>
+  <variable name="gquest_start_panning">0</variable>
+  <variable name="gquest_start_volume">100</variable>
+  <variable name="gratz_panning">0</variable>
+  <variable name="gratz_volume">100</variable>
+  <variable name="gsocial_panning">0</variable>
+  <variable name="gsocial_volume">100</variable>
+  <variable name="gtell_panning">0</variable>
+  <variable name="gtell_volume">100</variable>
+  <variable name="helper_panning">0</variable>
+  <variable name="helper_volume">100</variable>
+  <variable name="immtalk_panning">0</variable>
+  <variable name="immtalk_volume">100</variable>
+  <variable name="info_panning">0</variable>
+  <variable name="info_volume">100</variable>
+  <variable name="inform_panning">0</variable>
+  <variable name="inform_volume">100</variable>
+  <variable name="level_up_panning">0</variable>
+  <variable name="level_up_volume">100</variable>
+  <variable name="ltalk_panning">0</variable>
+  <variable name="ltalk_volume">100</variable>
+  <variable name="manor_doorbell_panning">0</variable>
+  <variable name="manor_doorbell_volume">100</variable>
+  <variable name="market_panning">0</variable>
+  <variable name="market_volume">100</variable>
+  <variable name="music_panning">0</variable>
+  <variable name="music_volume">100</variable>
+  <variable name="newbie_panning">0</variable>
+  <variable name="newbie_volume">100</variable>
+  <variable name="nobletalk_panning">0</variable>
+  <variable name="nobletalk_volume">100</variable>
+  <variable name="personal_note_panning">0</variable>
+  <variable name="personal_note_volume">100</variable>
+  <variable name="pokerinfo_panning">0</variable>
+  <variable name="pokerinfo_volume">100</variable>
+  <variable name="quest_complete_panning">0</variable>
+  <variable name="quest_complete_volume">100</variable>
+  <variable name="quest_ready_panning">0</variable>
+  <variable name="quest_ready_volume">100</variable>
+  <variable name="quest_start_panning">0</variable>
+  <variable name="quest_start_volume">100</variable>
+  <variable name="quest_target_found_panning">0</variable>
+  <variable name="quest_target_found_volume">100</variable>
+  <variable name="quest_target_killed_panning">0</variable>
+  <variable name="quest_target_killed_volume">100</variable>
+  <variable name="quest_warning_panning">0</variable>
+  <variable name="quest_warning_volume">100</variable>
+  <variable name="question_panning">0</variable>
+  <variable name="question_volume">100</variable>
+  <variable name="quote_panning">0</variable>
+  <variable name="quote_volume">100</variable>
+  <variable name="racetalk_panning">0</variable>
+  <variable name="racetalk_volume">100</variable>
+  <variable name="rauction_panning">0</variable>
+  <variable name="rauction_volume">100</variable>
+  <variable name="reach_sh_panning">0</variable>
+  <variable name="reach_sh_volume">100</variable>
+  <variable name="remote_sound_panning">0</variable>
+  <variable name="remote_sound_volume">100</variable>
+  <variable name="restore_panning">0</variable>
+  <variable name="restore_volume">100</variable>
+  <variable name="rp_panning">0</variable>
+  <variable name="rp_volume">100</variable>
+  <variable name="say_panning">0</variable>
+  <variable name="say_volume">100</variable>
+  <variable name="scry_panning">0</variable>
+  <variable name="scry_volume">100</variable>
+  <variable name="sh_powerup_panning">0</variable>
+  <variable name="sh_powerup_volume">100</variable>
+  <variable name="sp_allowlist">{
+  }</variable>
+  <variable name="sp_global_volume">100</variable>
+  <variable name="sp_mute_toggle">0</variable>
+  <variable name="special_find_panning">0</variable>
+  <variable name="special_find_volume">100</variable>
+  <variable name="spouse_panning">0</variable>
+  <variable name="spouse_volume">100</variable>
+  <variable name="stop_follow_panning">0</variable>
+  <variable name="stop_follow_volume">100</variable>
+  <variable name="tech_panning">0</variable>
+  <variable name="tech_volume">100</variable>
+  <variable name="tell_panning">0</variable>
+  <variable name="tell_volume">100</variable>
+  <variable name="tiertalk_panning">0</variable>
+  <variable name="tiertalk_volume">100</variable>
+  <variable name="wangrp_panning">0</variable>
+  <variable name="wangrp_volume">100</variable>
+  <variable name="warfare_panning">0</variable>
+  <variable name="warfare_volume">100</variable>
+  <variable name="whisper_panning">0</variable>
+  <variable name="whisper_volume">100</variable>
+  <variable name="yell_panning">0</variable>
+  <variable name="yell_volume">100</variable>
+  <variable name="zone_repop_panning">0</variable>
+  <variable name="zone_repop_volume">100</variable>
+</variables>
+</muclient>
