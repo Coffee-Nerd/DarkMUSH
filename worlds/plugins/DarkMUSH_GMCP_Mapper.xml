@@ -21,7 +21,7 @@
    purpose="GMCP map builder for DarkMUSH"
    date_written="2010-09-01 16:37:14"
    requires="4.73"
-   version="2.03"
+   version="2.04"
    save_state="y"
    >
 
@@ -3906,7 +3906,7 @@ function got_gmcp_room()
    if not compact_mode then check_compact = "\r\n" end
 
    if shownotes and room and room.notes and room.notes ~= "" then
-      Simulate(ColoursToANSI("@x033*** MAPPER NOTE *** -> "..room.notes.."@w\r\n"..check_compact))
+      Simulate(ColoursToANSI("$x033*** MAPPER NOTE *** -> "..room.notes.."$w\r\n"..check_compact))
    end
 
    -- re-save if we got information that is different than before
