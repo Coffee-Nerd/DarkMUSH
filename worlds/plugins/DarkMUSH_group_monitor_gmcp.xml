@@ -234,6 +234,8 @@ font_size = 0
 font_name = ""
 group_members = {}
 group_info = {}
+hidden_enemies = {}
+group_enemies = {}
 
 local defaultColorVals = {Health={0x00ff00,0x004400}, Mana={0xff5500,0x442200}, Moves={0x00ffff,0x004444}, Align={0x0000ff,0x00ffff}}
 colorVals = defaultColorVals
@@ -245,6 +247,8 @@ thresh1percent = tonumber (GetVariable("thresh1percent")) or 40
 thresh2percent = tonumber (GetVariable("thresh2percent")) or 20
 thresh1color = tonumber (GetVariable("thresh1color")) or 0x00ffff
 thresh2color = tonumber (GetVariable("thresh2color")) or 0x0000ff
+enemythresh1color = tonumber (GetVariable("enemythresh1color")) or 0xff0000
+enemythresh2color = tonumber (GetVariable("enemythresh2color")) or 0x880000
 
 local barIndex = {"Health", "Mana", "Moves", "Align"}
 
@@ -323,6 +327,21 @@ function RemoveMembersFromGroupDisplay()
    end
 end
 
+function RemoveEnemiesFromGroupDisplay()
+   group_enemies = {}
+   if (full_group_data ~= nil) then
+      for i,v in ipairs(full_group_data.enemies) do
+         if not (
+            hidden_enemies[v.name]
+            or ((show_self == 0) and (char_data ~= nil) and (v.name == char_data.name))
+            or ((in_room == 1) and (v.info.here == '0'))
+         ) then
+            table.insert(group_enemies, v)
+         end
+      end
+   end
+end
+
 function showAllMembers()
    ColourNote("yellow", "", "All members will be shown in the group monitor window.")
    hidden_members = {}
@@ -350,6 +369,32 @@ function hideAllMembers()
    OnPluginInstall()
 end
 
+function showAllEnemies()
+   ColourNote("yellow", "", "All enemies will be shown in the group monitor window.")
+   hidden_enemies = {}
+   -- save and reload
+   SaveState()
+   RemoveEnemiesFromGroupDisplay()
+   OnPluginInstall()
+end
+
+function hideAllEnemies()
+   ColourNote("yellow", "", "All enemies will be hidden from the group monitor window.")
+   hidden_enemies = {}
+   if full_group_data and full_group_data.enemies and char_data and char_data.name then
+      for i,v in ipairs(full_group_data.enemies) do
+         if v.name ~= char_data.name then
+            hidden_enemies[v.name] = true
+         end
+      end
+   end
+   -- save and reload
+   SaveState()
+   RemoveEnemiesFromGroupDisplay()
+   OnPluginInstall()
+end
+
+
 function byTotalDamage(a, b)
    return (tonumber(a.info.mhp) - tonumber(a.info.hp)) > (tonumber(b.info.mhp) - tonumber(b.info.hp))
 end
@@ -357,6 +402,17 @@ end
 function byPercentDamage(a, b)
    return (tonumber(a.info.hp) / tonumber(a.info.mhp)) < (tonumber(b.info.hp) / tonumber(b.info.mhp))
 end
+
+      
+function sortEnemies()
+   if sort_hp_which == "total" then
+      table.sort(group_enemies, byTotalDamage)
+   else
+      table.sort(group_enemies, byPercentDamage)
+   end
+end
+
+    
 
 function sortMembers()
    if sort_hp_which == "total" then
@@ -451,19 +507,31 @@ function DisplayGroupPage()
    else
       y = title_height
 
-      if #group_members > 0 then
+      if #group_members > 0 then 
          -- MAIN DISPLAY BODY
          if ultracompact then
-            draw_ultracompact_format()
+             draw_ultracompact_format(group_members)
          else
-            draw_original_format()
+             draw_original_format(group_members)
          end
-      else
-         txt = "Your group is empty."
+     end
+
+     -- Draw enemies separately, even if group members exist
+     if #group_enemies > 0 then
+         y = y + GAP -- Adjust the y position
+         if ultracompact then
+             draw_ultracompact_format(group_enemies, true)
+         else
+             draw_original_format(group_enemies, true)
+         end
+     end
+
+     if (#group_members == 0 and #group_enemies == 0) then
+         txt = "Your group and enemies are empty."
          txtlen = WindowTextWidth(win,font_id, txt)
          WindowText(win, font_id, txt, (width-txtlen)/2, (height+line_height)/2, 0, 0, Theme.BODY_TEXT, utf8)
-      end
-   end
+     end
+ end
 
    Theme.DrawBorder(win)
    Theme.Draw3DRect(win, -1, -1, WindowInfo(win, 3)-1, title_height, false)
@@ -492,288 +560,292 @@ end -- Display_Group_Page
 
 
 function draw_ultracompact_format()
-   -- <lvl> <Name, with align colors> <HP bar + overlay numbers> <qt, with colors to show q-status>
-   local num_members = 0
+   -- Clear the window
+   WindowRectOp(win, 2, 0, 0, 0, 0, Theme.PRIMARY_BODY)
+   
+   -- Combine group_members and group_enemies into a single list with a flag indicating if it's an enemy
+   local combined_members = {}
+   for _, v in ipairs(group_members) do
+       table.insert(combined_members, {data = v, is_enemy = false})
+   end
+   for _, v in ipairs(group_enemies) do
+       table.insert(combined_members, {data = v, is_enemy = true})
+   end
+
+   local num_members = #combined_members
    local column_width = WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW") + (GAP*4)
    if gauge_style == 2 then
-      if number_style ~= 3 then
-         column_width = WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWWWWWWWWWW") + (GAP*4)
-      end
-   end
-   for i,v in ipairs(group_members) do
-      num_members = i
-      v.info.lvl = string.lpad(v.info.lvl, 3, ' ')
-      v.namestring = string.rpad(v.name:sub(1, 12), 12, ' ') -- 12 character width
-      if v.info.qs == "1" then
-         v.qtstring = "[Q]"
-      else
-         v.qtstring = "Q:"..string.lpad(v.info.qt, 2, ' ')
-      end
-
-      local base = v.info["hp"]
-      local max = v.info["mhp"]
-      if number_style == 1 then -- STANDARD
-         v["hpstring"] = string.lpad(limit_n(base), 5, ' ')
-      elseif number_style == 2 then -- PERCENTAGES
-         v["hpstring"] = string.lpad(string.format('%d', 100*base/max).."%", 4, ' ')
-      elseif number_style == 3 then -- STANDARD + PERCENTAGES
-         v["hpstring"] = string.lpad(limit_n(base), 5, ' ').." ("..string.lpad(string.format('%d',100*base/max).."%", 4, ' ')..")"
-      end
+       if number_style ~= 3 then
+           column_width = WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWWWWWWWWWW") + (GAP*4)
+       end
    end
 
-   local baseX = GAP
-   local baseY = y+GAP
-   num_columns = math.max(math.floor(width / column_width), 1)
-   members_per_col = math.ceil((num_members)/num_columns)
+   -- Prepare member strings
+   for _, v in ipairs(combined_members) do
+       local member = v.data
+       member.info.lvl = string.lpad(member.info.lvl, 3, ' ')
+       member.namestring = string.rpad(member.name:sub(1, 12), 12, ' ') -- 12 character width
+       if member.info.qs == "1" then
+           member.qtstring = "[Q]"
+       else
+           member.qtstring = "Q:"..string.lpad(member.info.qt, 2, ' ')
+       end
 
-   -- sort or not
-   if sort_hp_which ~= "" then
-      sortMembers()
-   end
-   if sort_quests == 1 then
-      non_quest = {}
-      quest = {}
-      for i,v in ipairs(group_members) do
-         if v.info.qs == "1" then
-            table.insert(quest, v)
-         else
-            table.insert(non_quest, v)
-         end
-      end
-      group_members = {}
-      for i,v in ipairs(non_quest) do
-         table.insert(group_members, v)
-      end
-      for i,v in ipairs(quest) do
-         table.insert(group_members, v)
-      end
-      non_quest = {}
-      quest = {}
-   end
-
-   for i,v in ipairs(group_members) do
-      if (i ~= 1) and ((i-1) % members_per_col == 0) then
-         baseY = title_height+GAP-1
-         y = baseY
-         baseX = baseX + column_width
-         x = baseX
-      else
-         baseY = y + GAP-1
-         y = baseY
-         x = baseX
-      end
-
-      zeroed_alignment = v.info.align+2500
-      name_colour = ((zeroed_alignment<=1625 and colorVals.Align[1]) or ((zeroed_alignment>=3375 and colorVals.Align[2]) or 0xcecece))
-      bar_width = column_width - GAP*3 - WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWW")
-
-      x = x + WindowText(win, font_id, v.info.lvl.." ", x, y, 0, 0, Theme.BODY_TEXT, utf8)
-      x = x + WindowText(win, font_id, v.namestring, x, y, 0, 0, name_colour, utf8)
-
-      local hpColor1 = colorVals.Health[1]
-      local hpColor2 = colorVals.Health[2]
-      local hp_label_color = Theme.BODY_TEXT
-      local hpPercent = 100
-      if tonumber(v.info.hp) and tonumber(v.info.mhp) then
-         hpPercent = 100 * (tonumber(v.info.hp) / tonumber(v.info.mhp))
-      end
-      if thresh1active == 1 then
-         if hpPercent < thresh1percent then
-            hp_label_color = thresh1color
-            hpColor1 = thresh1color
-            hpColor2 = thresh1color
-         end
-      end
-      if thresh2active == 1 then
-         if hpPercent < thresh2percent then
-            hp_label_color = thresh2color
-            hpColor1 = thresh2color
-            hpColor2 = thresh2color
-         end
-      end
-
-      WindowText(win, font_id, v.qtstring, x+bar_width+(3*GAP), y, 0, 0, Theme.BODY_TEXT, utf8)
-      x = drawGauge("", v.info.hp, v.info.mhp, x, y, bar_width, line_height, hpColor1, hpColor2)
-      drawLabel(x, y, bar_width, v.hpstring, hp_label_color, true)
-      y = y + line_height + 1
-
-      y = y + GAP - 2
-      WindowLine(win, baseX-GAP, y, baseX+column_width-GAP+1, y, Theme.THREE_D_HIGHLIGHT, 0, 1) -- horizontal line
-      WindowLine(win, baseX+column_width-GAP, baseY-GAP+2, baseX+column_width-GAP, y, Theme.THREE_D_HIGHLIGHT, 0, 1) -- vertical line
-   end
-end
-
-function draw_original_format()
-   local num_members = 0
-   local column_width = 0
-   for i,v in ipairs(group_members) do
-      num_members = i
-      v.info.lvl = string.lpad(v.info.lvl, 3, ' ')
-      v.qtstring = ""
-      v.namestring = v.name
-      if (show_quest == 1) or (show_tnl == 1) then
-         v.namestring = string.rpad(v.name:sub(1, 12), 12, ' ') -- 12 character width
-         local txt = ""
-         if show_quest == 1 then
-            if v.info.qs == "1" then
-               txt = txt.."[Q]"
-            else
-               txt = txt.."Q:"..string.lpad(v.info.qt, 2, ' ')
-            end
-            if show_tnl == 1 then
-               txt = txt..", "
-            end
-         end
-         if show_tnl == 1 then 
-            txt = txt.."TNL:"..string.lpad(v.info.tnl, 5, ' ')
-         end
-         v.qtstring = txt
-      end
-
-      for i, s in ipairs({"hp", "mn", "mv"}) do
-         local base = v.info[s]
-         local max = v.info["m"..s]
-         if number_style == 1 then -- STANDARD
-            v[s.."string"] = string.lpad(limit_n(base), 5, ' ').."/"..string.rpad(limit_n(max), 5, ' ')
-         elseif number_style == 2 then -- PERCENTAGES
-            v[s.."string"] = string.lpad(string.format('%d', 100*base/max).."%", 4, ' ')
-         elseif number_style == 3 then -- STANDARD + PERCENTAGES
-            v[s.."string"] = string.lpad(limit_n(base), 5, ' ').."/"..string.rpad(limit_n(max), 5, ' ').." ("..string.lpad(string.format('%d',100*base/max).."%", 4, ' ')..")"
-         end
-      end
-      if gauge_style == 2 then
-         column_width = math.max(column_width, WindowTextWidth(win, font_id, "[]"..v.info.lvl..v.namestring..v.qtstring))
-         if show_hp then
-            column_width = math.max(column_width, labels_width + WindowTextWidth(win, font_id, v.hpstring))
-         end
-         if show_mn then
-            column_width = math.max(column_width, labels_width + WindowTextWidth(win, font_id, v.mnstring))
-         end
-         if show_mv then
-            column_width = math.max(column_width, labels_width + WindowTextWidth(win, font_id, v.mvstring))
-         end
-      end
-   end
-   if column_width == 0 then
-      column_width = WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW") + (GAP*4)
-   else
-      if (show_quest == 1) or (show_tnl == 1) then
-         column_width = column_width + (GAP*4)
-      else
-         column_width = column_width + (GAP*3)
-      end
+       local base = member.info["hp"]
+       local max = member.info["mhp"]
+       if number_style == 1 then -- STANDARD
+           member["hpstring"] = string.lpad(limit_n(base), 5, ' ')
+       elseif number_style == 2 then -- PERCENTAGES
+           member["hpstring"] = string.lpad(string.format('%d', 100*base/max).."%", 4, ' ')
+       elseif number_style == 3 then -- STANDARD + PERCENTAGES
+           member["hpstring"] = string.lpad(limit_n(base), 5, ' ').." ("..string.lpad(string.format('%d',100*base/max).."%", 4, ' ')..")"
+       end
    end
 
    local baseX = GAP
-   local baseY = y+GAP
-   num_columns = math.max(math.floor(width / column_width), 1)
-   members_per_col = math.ceil((num_members)/num_columns)
-   bar_width = column_width - GAP*3 - labels_width
-   if overlay_numbers == 0 and gauge_style ~= 2 then
-      if number_style == 1 then
-         bar_width = bar_width - WindowTextWidth(win, font_id, "88888/88888")
-      elseif number_style == 2 then
-         bar_width = bar_width - WindowTextWidth(win, font_id, "100%")
-      elseif number_style == 3 then
-         bar_width = bar_width - WindowTextWidth(win, font_id, "88888/88888 (100%)")
-      end
-      bar_width = bar_width - GAP
-   end
+   local baseY = y + GAP
+   local num_columns = math.max(math.floor(width / column_width), 1)
+   local members_per_col = math.ceil(num_members / num_columns)
+   local x = baseX
+   local y = baseY
 
-   -- sort or not
-   if sort_hp_which ~= "" then
-      sortMembers()
-   end
-   if sort_quests == 1 then
-      non_quest = {}
-      quest = {}
-      for i,v in ipairs(group_members) do
-         if v.info.qs == "1" then
-            table.insert(quest, v)
-         else
-            table.insert(non_quest, v)
-         end
-      end
-      group_members = {}
-      for i,v in ipairs(non_quest) do
-         table.insert(group_members, v)
-      end
-      for i,v in ipairs(quest) do
-         table.insert(group_members, v)
-      end
-      non_quest = {}
-      quest = {}
-   end
+   local function draw_member_or_enemy(v, i)
+       local member = v.data
+       if (i ~= 1) and ((i - 1) % members_per_col == 0) then
+           baseY = title_height + GAP - 1
+           y = baseY
+           baseX = baseX + column_width
+           x = baseX
+       else
+           baseY = y + GAP - 1
+           y = baseY
+           x = baseX
+       end
 
-   for i,v in ipairs(group_members) do
-      if (i ~= 1) and ((i-1) % members_per_col == 0) then
-         baseY = title_height+GAP-1
-         y = baseY
-         baseX = baseX + column_width
-         x = baseX
-      else
-         baseY = y + GAP-1
-         y = baseY
-         x = baseX
-      end
-      -- txt = "["..(("P" and v.info.status.poisoned == true) or "_")..
-      --     (("B" and v.info.status.blind == true) or "_")..
-      --     (("W" and v.info.status.webbed == true) or "_")..
-      --     (("C" and v.info.status.cursed == true) or "_")..
-      --     (("*" and v.info.status.attacked == true) or "_").."]"
-      -- WindowText(win, font_id, txt, x, y, 0, 0, Theme.BODY_TEXT, utf8)
-      -- x = x + math.max(WindowTextWidth(win, font_id, "[PBWC*]"), WindowTextWidth(win, font_id, "[_____]")) + GAP
-      x = x + WindowText(win, font_id, "L"..v.info.lvl.." ", x, y, 0, 0, Theme.BODY_TEXT, utf8)
-      zeroed_alignment = v.info.align+2500
-      name_colour = ((zeroed_alignment<=1625 and colorVals.Align[1]) or ((zeroed_alignment>=3375 and colorVals.Align[2]) or 0xcecece))
-      x = x + WindowText(win, font_id, v.namestring, x, y, 0, 0, name_colour, utf8) + GAP
+       zeroed_alignment = member.info.align + 2500
+       name_colour = ((zeroed_alignment <= 1625 and colorVals.Align[1]) or ((zeroed_alignment >= 3375 and colorVals.Align[2]) or 0xcecece))
+       bar_width = column_width - GAP * 3 - WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWW")
 
-      WindowText(win, font_id, v.qtstring, x, y, 0, 0, Theme.BODY_TEXT, utf8)
+       x = x + WindowText(win, font_id, member.info.lvl .. " ", x, y, 0, 0, Theme.BODY_TEXT, utf8)
+       x = x + WindowText(win, font_id, member.namestring, x, y, 0, 0, name_colour, utf8)
 
-      y = y + line_height + 1
-      if show_hp == 1 then -- HP BAR
-         local hpColor1 = colorVals.Health[1]
-         local hpColor2 = colorVals.Health[2]
-         local hp_label_color = Theme.BODY_TEXT
-         local hpPercent = 100
-         if tonumber(v.info.hp) and tonumber(v.info.mhp) then
-            hpPercent = 100 * (tonumber(v.info.hp) / tonumber(v.info.mhp))
-         end
-         if thresh1active == 1 then
-            if hpPercent < thresh1percent then
+       local hpColor1 = v.is_enemy and ColourNameToRGB("red") or colorVals.Health[1]
+       local hpColor2 = v.is_enemy and ColourNameToRGB("darkred") or colorVals.Health[2]
+       local hp_label_color = Theme.BODY_TEXT
+       local hpPercent = 100
+       if tonumber(member.info.hp) and tonumber(member.info.mhp) then
+           hpPercent = 100 * (tonumber(member.info.hp) / tonumber(member.info.mhp))
+       end
+       if thresh1active == 1 then
+           if hpPercent < thresh1percent then
                hp_label_color = thresh1color
                hpColor1 = thresh1color
                hpColor2 = thresh1color
-            end
-         end
-         if thresh2active == 1 then
-            if hpPercent < thresh2percent then
+           end
+       end
+       if thresh2active == 1 then
+           if hpPercent < thresh2percent then
                hp_label_color = thresh2color
                hpColor1 = thresh2color
                hpColor2 = thresh2color
-            end
-         end
-         x = drawGauge("HP", v.info.hp, v.info.mhp, baseX, y, bar_width, line_height, hpColor1, hpColor2)
-         drawLabel(x, y, bar_width, v.hpstring, hp_label_color, overlay_numbers)
-         y = y + line_height + 1
-      end
+           end
+       end
 
-      if show_mn == 1 then-- MANA BAR
-         x = drawGauge("MN", v.info.mn, v.info.mmn, baseX, y, bar_width, line_height, colorVals.Mana[1], colorVals.Mana[2])
-         drawLabel(x, y, bar_width, v.mnstring, Theme.BODY_TEXT, overlay_numbers)
-         y = y + line_height + 1
-      end
+       WindowText(win, font_id, member.qtstring, x + bar_width + (3 * GAP), y, 0, 0, Theme.BODY_TEXT, utf8)
+       x = drawGauge("", member.info.hp, member.info.mhp, x, y, bar_width, line_height, hpColor1, hpColor2)
+       drawLabel(x, y, bar_width, member.hpstring, hp_label_color, true)
+       y = y + line_height + 1
 
-      if show_mv == 1 then -- MOVES BAR
-         x = drawGauge("MV", v.info.mv, v.info.mmv, baseX, y, bar_width, line_height, colorVals.Moves[1], colorVals.Moves[2], Theme.BODY_TEXT, overlay_numbers)
-         drawLabel(x, y, bar_width, v.mvstring, Theme.BODY_TEXT, overlay_numbers)
-         y = y + line_height + 1
-      end
-      y = y + GAP - 2
-      WindowLine(win, baseX-GAP, y, baseX+column_width-GAP+1, y, Theme.THREE_D_HIGHLIGHT, 0, 1) -- horizontal line
-      WindowLine(win, baseX+column_width-GAP, baseY-GAP+2, baseX+column_width-GAP, y, Theme.THREE_D_HIGHLIGHT, 0, 1) -- vertical line
+       y = y + GAP - 2
+       WindowLine(win, baseX - GAP, y, baseX + column_width - GAP + 1, y, Theme.THREE_D_HIGHLIGHT, 0, 1) -- horizontal line
+       WindowLine(win, baseX + column_width - GAP, baseY - GAP + 2, baseX + column_width - GAP, y, Theme.THREE_D_HIGHLIGHT, 0, 1) -- vertical line
+
+       baseY = y + GAP
+   end
+
+   -- Draw combined members and enemies
+   for i, v in ipairs(combined_members) do
+       draw_member_or_enemy(v, i)
    end
 end
+
+
+function draw_original_format()
+   -- Clear the window
+   WindowRectOp(win, 2, 0, 0, 0, 0, Theme.PRIMARY_BODY)
+   
+   -- Combine group_members and group_enemies into a single list with a flag indicating if it's an enemy
+   local combined_members = {}
+   for _, v in ipairs(group_members) do
+       table.insert(combined_members, {data = v, is_enemy = false})
+   end
+   for _, v in ipairs(group_enemies) do
+       table.insert(combined_members, {data = v, is_enemy = true})
+   end
+
+   -- Calculate the column width
+   local column_width = 0
+   for _, v in ipairs(combined_members) do
+       local member = v.data
+       member.info.lvl = string.lpad(member.info.lvl, 3, ' ')
+       member.qtstring = ""
+       member.namestring = member.name
+       if (show_quest == 1) or (show_tnl == 1) then
+           if not v.is_enemy then
+               member.namestring = string.rpad(member.name:sub(1, 12), 12, ' ') -- 12 character width
+           else 
+               member.namestring = string.rpad(member.name:sub(1, 25), 25, ' ') -- 25 character width
+           end
+           local txt = ""
+           if show_quest == 1 then
+               if member.info.qs == "1" then
+                   txt = txt.."[Q]"
+               else
+                   if not v.is_enemy then
+                       txt = txt.."Q:"..string.lpad(member.info.qt, 2, ' ')
+                   end
+               end
+               if show_tnl == 1 then
+                   if not v.is_enemy then
+                       txt = txt..", "
+                   end
+               end
+           end
+           if show_tnl == 1 then 
+               if not v.is_enemy then
+                   txt = txt.."XP:"..string.lpad(limit_n(member.info.tnl), 5, ' ')
+               end
+           end
+           member.qtstring = txt
+       end
+
+       for _, s in ipairs({"hp", "mn", "mv"}) do
+           local base = member.info[s]
+           local max = member.info["m"..s]
+           if number_style == 1 then -- STANDARD
+               member[s.."string"] = string.lpad(limit_n(base), 5, ' ').."/"..string.rpad(limit_n(max), 5, ' ')
+           elseif number_style == 2 then -- PERCENTAGES
+               member[s.."string"] = string.lpad(string.format('%d', 100*base/max).."%", 4, ' ')
+           elseif number_style == 3 then -- STANDARD + PERCENTAGES
+               member[s.."string"] = string.lpad(limit_n(base), 5, ' ').."/"..string.rpad(limit_n(max), 5, ' ').." ("..string.lpad(string.format('%d',100*base/max).."%", 4, ' ')..")"
+           end
+       end
+       if gauge_style == 2 then
+           column_width = math.max(column_width, WindowTextWidth(win, font_id, "[]"..member.info.lvl..member.namestring..member.qtstring))
+           if show_hp then
+               column_width = math.max(column_width, labels_width + WindowTextWidth(win, font_id, member.hpstring))
+           end
+           if show_mn then
+               column_width = math.max(column_width, labels_width + WindowTextWidth(win, font_id, member.mnstring))
+           end
+           if show_mv then
+               column_width = math.max(column_width, labels_width + WindowTextWidth(win, font_id, member.mvstring))
+           end
+       end
+   end
+   if column_width == 0 then
+       column_width = WindowTextWidth(win, font_id, "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW") + (GAP*4)
+   else
+       if (show_quest == 1) or (show_tnl == 1) then
+           column_width = column_width + (GAP*4)
+       else
+           column_width = column_width + (GAP*3)
+       end
+   end
+
+   local baseX = GAP
+   local baseY = title_height + GAP
+   local num_columns = math.max(math.floor(width / column_width), 1)
+   local members_per_col = math.ceil(#combined_members / num_columns)
+   local bar_width = column_width - GAP * 3 - labels_width
+   if overlay_numbers == 0 and gauge_style ~= 2 then
+       if number_style == 1 then
+           bar_width = bar_width - WindowTextWidth(win, font_id, "88888/88888")
+       elseif number_style == 2 then
+           bar_width = bar_width - WindowTextWidth(win, font_id, "100%")
+       elseif number_style == 3 then
+           bar_width = bar_width - WindowTextWidth(win, font_id, "88888/88888 (100%)")
+       end
+       bar_width = bar_width - GAP
+   end
+
+   local function draw_member_or_enemy(v, i)
+       local member = v.data
+       if (i ~= 1) and ((i - 1) % members_per_col == 0) then
+           baseY = title_height + GAP - 1
+           y = baseY
+           baseX = baseX + column_width
+       else
+           y = baseY
+       end
+       x = baseX
+
+       -- Add the top line here
+       y = y - GAP + 2
+       WindowLine(win, baseX - GAP, y, baseX + column_width - GAP + 1, y, v.is_enemy and ColourNameToRGB("red") or Theme.THREE_D_HIGHLIGHT, 0, 1) -- horizontal line
+       x = x + WindowText(win, font_id, "L" .. (member.info.lvl or ""), x, y, 0, 0, Theme.BODY_TEXT, utf8)
+       zeroed_alignment = member.info.align + 2500
+       name_colour = ((zeroed_alignment <= 1625 and colorVals.Align[1]) or ((zeroed_alignment >= 3375 and colorVals.Align[2]) or 0xcecece))
+       x = x + WindowText(win, font_id, member.namestring or "", x, y, 0, 0, name_colour, utf8) + GAP
+
+       WindowText(win, font_id, member.qtstring or "", x, y, 0, 0, Theme.BODY_TEXT, utf8)
+
+       y = y + line_height + 1
+       if show_hp == 1 then -- HP BAR
+           local hpColor1 = v.is_enemy and ColourNameToRGB("red") or colorVals.Health[1]
+           local hpColor2 = v.is_enemy and ColourNameToRGB("darkred") or colorVals.Health[2]
+           local hp_label_color = Theme.BODY_TEXT
+           local hpPercent = 100
+           if tonumber(member.info.hp) and tonumber(member.info.mhp) then
+               hpPercent = 100 * (tonumber(member.info.hp) / tonumber(member.info.mhp))
+           end
+           if thresh1active == 1 then
+               if hpPercent < thresh1percent then
+                   hp_label_color = thresh1color
+                   hpColor1 = thresh1color
+                   hpColor2 = thresh1color
+               end
+           end
+           if thresh2active == 1 then
+               if hpPercent < thresh2percent then
+                   hp_label_color = thresh2color
+                   hpColor1 = thresh2color
+                   hpColor2 = thresh2color
+               end
+           end
+
+           x = drawGauge("HP", member.info.hp, member.info.mhp, baseX, y, bar_width, line_height, hpColor1, hpColor2)
+           drawLabel(x, y, bar_width, member.hpstring or "", hp_label_color, overlay_numbers)
+           y = y + line_height + 1
+       end
+
+       if show_mn == 1 then -- MANA BAR
+           x = drawGauge("MN", member.info.mn, member.info.mmn, baseX, y, bar_width, line_height, colorVals.Mana[1], colorVals.Mana[2])
+           drawLabel(x, y, bar_width, member.mnstring or "", Theme.BODY_TEXT, overlay_numbers)
+           y = y + line_height + 1
+       end
+
+       if show_mv == 1 then -- MOVES BAR
+           x = drawGauge("MV", member.info.mv, member.info.mmv, baseX, y, bar_width, line_height, colorVals.Moves[1], colorVals.Moves[2])
+           drawLabel(x, y, bar_width, member.mvstring or "", Theme.BODY_TEXT, overlay_numbers)
+           y = y + line_height + 1
+       end
+
+       y = y + GAP - 2
+       WindowLine(win, baseX - GAP, y, baseX + column_width - GAP + 1, y, v.is_enemy and ColourNameToRGB("red") or Theme.THREE_D_HIGHLIGHT, 0, 1) -- horizontal line
+       WindowLine(win, baseX + column_width - GAP, baseY - GAP + 2, baseX + column_width - GAP, y, v.is_enemy and ColourNameToRGB("red") or Theme.THREE_D_HIGHLIGHT, 0, 1) -- vertical line
+
+       baseY = y + GAP
+   end
+
+   -- Draw combined members and enemies
+   for i, v in ipairs(combined_members) do
+       draw_member_or_enemy(v, i)
+   end
+end
+
+   
+
 
 function validate_percent(input)
    if string.sub(input, -1) == "%" then
@@ -1286,6 +1358,7 @@ function OnPluginBroadcast (msg, id, name, text)
          self_built = true
          if group_built then
             RemoveMembersFromGroupDisplay()
+            RemoveEnemiesFromGroupDisplay()  -- Added to update enemies display
             DisplayGroupPage()
          end
       end
@@ -1298,6 +1371,7 @@ function OnPluginBroadcast (msg, id, name, text)
             group_built = true
             if self_built then
                RemoveMembersFromGroupDisplay()
+               RemoveEnemiesFromGroupDisplay()
                DisplayGroupPage()
             else
                Send_GMCP_Packet("request char")
@@ -1427,6 +1501,7 @@ function OnPluginSaveState()
    SetVariable("thresh1color", thresh1color)
    SetVariable("thresh2color", thresh2color)
    SetVariable("ultracompact", ultracompact and "1" or "0")
+   SetVariable("hidden_enemies", serialize.save ("hidden_enemies"))
 end -- OnPluginSaveState
 
 function OnPluginClose()
