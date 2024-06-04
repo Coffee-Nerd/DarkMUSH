@@ -6,17 +6,17 @@
    author="Fiendish"
    id="f178e68512c685b3be1e9b07"
    language="Lua"
-   purpose="Aardwolf Group Monitor"
+   purpose="DarkMUSH Group Monitor"
    date_written="2010-12-13 15:35:02"
    requires="4.73"
-   version="2.0"
+   version="2.1"
    save_state="y"
 >
 
 <description trim="y">
 
-Aardwolf Group Monitor
-
+DarkMUSH Group Monitor
+Built by Avi Kelman (Fiendish) for the Aardwolf community, and modified by DarkMUSH for their own use.
 Gives a persistant visual display of the status of your group members using
 details captured through GMCP.
 
@@ -833,7 +833,7 @@ function draw_original_format()
 
        y = y + GAP - 2
        WindowLine(win, baseX - GAP, y, baseX + column_width - GAP + 1, y, v.is_enemy and ColourNameToRGB("red") or Theme.THREE_D_HIGHLIGHT, 0, 1) -- horizontal line
-       WindowLine(win, baseX + column_width - GAP, baseY - GAP + 2, baseX + column_width - GAP, y, v.is_enemy and ColourNameToRGB("red") or Theme.THREE_D_HIGHLIGHT, 0, 1) -- vertical line
+       WindowLine(win, baseX + column_width - GAP, baseY - GAP + 1, baseX + column_width - GAP, y, v.is_enemy and ColourNameToRGB("red") or Theme.THREE_D_HIGHLIGHT, 0, 1) -- vertical line
 
        baseY = y + GAP
    end
