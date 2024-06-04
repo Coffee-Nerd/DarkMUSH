@@ -11,7 +11,7 @@
    save_state="y"
    date_written="2022-10-24 00:00:00"
    requires="4.00"
-   version="2.08"
+   version="2.13"
    >
 
 </plugin>
@@ -81,6 +81,8 @@ dofile(GetInfo(60) .. "darkwiz_plugin_colors.lua")
 
 local gitHubRaw = "https://raw.githubusercontent.com/Coffee-Nerd/DarkMUSH-Updater/main/github.list"
 local rawPluginUrl
+pluginlinelength = 0
+paddedpluginlinelength = 0
   
 
 function utilprint(str, messageType)
@@ -303,36 +305,54 @@ function TellUnicodeColours(color_coded_str)
     end
 end
 
+
 function renderPluginInfo(build_res, build_Len, ghName, pluginId)
     if build_res == 1 then
-        unicodeprint("@x238┌" .. displayUnicode("2500"):rep(70) .. "┐")
+        unicodeprint("@x238┌" .. displayUnicode("2500"):rep(90) .. "┐")
     else
-        printSeparator(72)
+        printSeparator(92)
     end
-    TellUnicodeColours("│ @c[@R" .. build_res .. "@c] " .. ghName .. " ")
+    TellUnicodeColours("│ @x238[@R" .. build_res .. "@x238] @x208" .. ghName .. " ")
+    pluginlinelength = #ghName + 6
     if IsPluginInstalled(hpmVar["cache"][pluginId]["pluginId"]) then
         local localVersion = tonumber(hpmVar["cache"][pluginId]["localVersion"])
         local webVersion = tonumber(hpmVar["cache"][pluginId]["webVersion"])
         if localVersion < webVersion then
-            Hyperlink("#updatePlugin " .. pluginId, "[Update Plugin] ", "Download and Update Plugin", "DarkOrange", "black", 0, 1)
-        else
-            createColoredHyperlink("reloadPlugin " .. pluginId, "@x238[@x084Re@x048lo@x078ad@x238] ", "Reload plugin")
-        end        
-      createColoredHyperlink("removePlugin " .. pluginId, "@x238[@RRemove@x238] ", "Remove plugin")        
-        if localVersion >= webVersion then
-            ColourTell("Gold", "black", "**", "Green", "black", "UP TO DATE", "Gold", "black", "** ")
-        else
-            ColourTell("Red", "black", " **", "Cyan", "black", "from " .. localVersion .. " to " .. webVersion, "Red", "black", "**")
+            needUpdate = true
+            pluginlinelength = pluginlinelength + #tostring(localVersion) + 4 + #tostring(webVersion) + 8 + 10 -- This is for "[Update] "
+            elseif localVersion >= webVersion then
+            needUpdate = false
+            pluginlinelength = pluginlinelength + 9 -- This is for "[Latest] "
         end
+      pluginlinelength = pluginlinelength + 9 -- This is for "[Reload] "
+      pluginlinelength = pluginlinelength + 9 -- This is for "[Remove] "
+      paddedpluginlinelength = string.rep(" ", 90 - pluginlinelength)
+      TellUnicodeColours("" .. paddedpluginlinelength .. "")
+      if needUpdate then 
+        createColoredHyperlink("#updatePlugin " .. pluginId, "@x238[@x196U@x202p@x208d@x214a@x220t@x226e @x190P@x154l@x118u@x082g@x047i@x048n@x238]", "Download and Update Plugin")
+        TellUnicodeColours(" @x238 (@w" .. hpmVar["cache"][pluginId]["localVersion"] .. "@Y->@G"..webVersion.."@x238) ")
+      else 
+        TellUnicodeColours("@x238(@x041La@x035te@x029s@x023t@x238) ")
+      end
+        
+      createColoredHyperlink("reloadPlugin " .. pluginId, "@x238[@YR@x220e@x214lo@x220a@Yd@x238] ", "Reload plugin") 
+      createColoredHyperlink("removePlugin " .. pluginId, "@x238[@RRemove@x238] ", "Remove plugin")
+      TellUnicodeColours("@x238│")
     else
+        pluginlinelength = pluginlinelength + 10 -- This is for "[Install] "
+        paddedpluginlinelength = string.rep(" ", 80 - pluginlinelength)
+        TellUnicodeColours("" .. paddedpluginlinelength .. "")
         createColoredHyperlink("installPlugin " .. pluginId, "@x208[Install] ", "Install plugin")
+        TellUnicodeColours("@x238│")
     end    
-    TellUnicodeColours("[@YVersion @R" .. hpmVar["cache"][pluginId]["localVersion"] .. "@x238] │")
+  --  TellUnicodeColours("[@YVersion @R" .. hpmVar["cache"][pluginId]["localVersion"] .. "@x238] │")
     print("")
-    TellUnicodeColours("│  @x073" .. hpmVar["cache"][pluginId]["purpose"] .. " @x238│")
+    local purpose = hpmVar["cache"][pluginId]["purpose"]
+    local paddedPurpose = purpose .. string.rep(" ", 87 - #purpose)
+    TellUnicodeColours("│  @x073" .. paddedPurpose .. " @x238│")
     print("")
     if build_res == build_Len then
-        unicodeprint("@x238└" .. displayUnicode("2500"):rep(70) .. "┘")
+        unicodeprint("@x238└" .. displayUnicode("2500"):rep(90) .. "┘@w")
     end
 end
 
@@ -466,11 +486,10 @@ end
 function raw_get_cache(retval, page, status, headers, full_status, request_url)
     local webName, rawName, webVersion, pluginId, localVersion, localName
     local script_directory = GetInfo(60)
-    
     if status == 200 then
         webName = getName(page, false)
         rawName = string.match(page, '%s+name="([a-zA-Z0-9_]+)"')
-        webVersion = string.match(page, '%s+version="(%d+%.?%d+)"')
+        webVersion = string.match(page, '  version="(%d+%.%d+)"')
         pluginId = string.match(page, '%s+id="(%w+)"')
         purpose = string.match(page, '%s+purpose="([^"]+)"')
         localVersion = GetPluginInfo(pluginId, 19)
