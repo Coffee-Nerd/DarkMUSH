@@ -11,7 +11,7 @@
    save_state="y"
    date_written="2022-10-24 00:00:00"
    requires="4.00"
-   version="2.13"
+   version="2.20"
    >
 
 </plugin>
@@ -29,7 +29,7 @@
      </alias>
      <alias
      script="updatePlugin"
-     match="^#updatePlugin ([0-9a-zA-Z]+)$"
+     match="^updatePlugin ([0-9a-zA-Z]+)$"
      enabled="y"
      regexp="y"
      sequence="100"
@@ -329,7 +329,7 @@ function renderPluginInfo(build_res, build_Len, ghName, pluginId)
       paddedpluginlinelength = string.rep(" ", 90 - pluginlinelength)
       TellUnicodeColours("" .. paddedpluginlinelength .. "")
       if needUpdate then 
-        createColoredHyperlink("#updatePlugin " .. pluginId, "@x238[@x196U@x202p@x208d@x214a@x220t@x226e @x190P@x154l@x118u@x082g@x047i@x048n@x238]", "Download and Update Plugin")
+        createColoredHyperlink("updatePlugin " .. pluginId, "@x238[@x196U@x202p@x208d@x214a@x220t@x226e @x190P@x154l@x118u@x082g@x047i@x048n@x238]", "Download and Update Plugin")
         TellUnicodeColours(" @x238 (@w" .. hpmVar["cache"][pluginId]["localVersion"] .. "@Y->@G"..webVersion.."@x238) ")
       else 
         TellUnicodeColours("@x238(@x041La@x035te@x029s@x023t@x238) ")
