@@ -9,6 +9,7 @@
    purpose="Manages activating color themes"
    requires="5.05"
    save_state="y"
+   version="1.1"
 >
 </plugin>
 
@@ -16,7 +17,7 @@
 
 <alias
    script="choose_theme"
-   match="aard theme change"
+   match="darkmush theme change"
    enabled="y"
    sequence="100"
    ignore_case="y"
