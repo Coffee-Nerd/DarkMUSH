@@ -1,0 +1,29 @@
+MUSHclient, packaged in this project in binary form, is free software as
+defined by the Free Software Foundation. If you want to compile it yourself,
+source code and compilation instructions are available at
+https://github.com/nickgammon/mushclient
+
+MUSHclient and this package use several third party software libraries.
+Licenses for those libraries are included in the licenses directory.
+
+A large portion of the underlying MUSHclient package was written by Avi Kelman,
+for Aardwolf MUD, and modified/customized for Dark Wizardry by Jeffrey Johnston, 
+(Coffee-Nerd)
+
+Avi Kelman's original package can be found below.
+
+https://github.com/fiendish/aardwolfclientpackage
+Copyright 2010-2020 Avi Kelman <fiendish @ Aardwolf MUD>
+
+This package is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.

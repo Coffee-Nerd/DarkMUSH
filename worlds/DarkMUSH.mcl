@@ -481,6 +481,7 @@ ColourNote("white", "green", "Added trigger "..(("%4" ~= "") and "to group '%4' 
 <include name="DarkMUSH_chat_echo.xml" plugin="y" />
 <include name="DarkMUSH_soundpack.xml" plugin="y" />
 <include name="DarkMUSH_Theme_Controller.xml" plugin="y" />
+<include name="DarkMUSH_group_monitor_gmcp.xml" plugin="y" />
 <include name="DarkMUSH_Repaint_Buffer.xml" plugin="y" />
 <include name="DarkMUSH_Plugin_Updater.xml" plugin="y" />
 <include name="DarkMUSH_Copy_Colour_Codes.xml" plugin="y" />
