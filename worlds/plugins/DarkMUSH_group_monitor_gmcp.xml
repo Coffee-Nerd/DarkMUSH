@@ -9,7 +9,7 @@
    purpose="DarkMUSH Group Monitor"
    date_written="2010-12-13 15:35:02"
    requires="4.73"
-   version="2.1"
+   version="2.25"
    save_state="y"
 >
 
@@ -199,7 +199,7 @@ sequence="100"
 require "aard_register_z_on_create"
 
 require "mw_theme_base"
-
+require "tprint"
 require "gauge"
 require "movewindow"
 require "gmcphelper"
@@ -219,6 +219,7 @@ show_mn = tonumber(GetVariable("show_mn")) or 1
 show_mv = tonumber(GetVariable("show_mv")) or 1
 show_quest = tonumber(GetVariable("show_quest")) or 1
 show_tnl = tonumber(GetVariable("show_tnl")) or 1
+show_enemies = tonumber(GetVariable("show_enemies")) or 1
 hidden = tonumber(GetVariable("hidden")) or 0
 sort_hp_which = GetVariable("sort_hp_which") or "" -- percent damage or total damage
 DeleteVariable("sort_hp")
@@ -859,23 +860,36 @@ function validate_percent(input)
    return true
 end
 
-function right_click_menu ()
-   local menustring ="!"..(ultracompact and "+" or "").."Ultracompact Mode|-|Change Font|>Show Players|"..((show_self==1 and "+") or "").."Include Self|"..((in_room==1 and "+") or "").."Same Room|-|All Others|No Others|Others In The Room Right Now|-|"
+function right_click_menu()
+   local menustring = "!" .. (ultracompact and "+" or "") .. "Ultracompact Mode|-|Change Font|>Show Players|" .. ((show_self == 1 and "+") or "") .. "Include Self|" .. ((in_room == 1 and "+") or "") .. "Same Room|-|All Others|No Others|Others In The Room Right Now|-|"
    local member_count = 0
    local member_names = {}
+
+   -- Debugging statements
+   -- print("Debug: Checking conditions for full_group_data, full_group_data.members, char_data, and char_data.name")
+   -- print("full_group_data:", serialize_table(full_group_data))
+   -- print("char_data:", serialize_table(char_data))
+
    if full_group_data and full_group_data.members and char_data and char_data.name then
-      for i,v in ipairs(full_group_data.members) do
-         if v.name ~= char_data.name then
-            menustring = menustring..(((hidden_members[v.name] == nil) and "+") or "")..v.name.."|"
-            member_count = member_count + 1
-            table.insert(member_names, v.name)
-         end
-      end
-   end
-   if ultracompact then
-      ultracompact_right_click_menu(menustring, member_count, member_names)
+       for i, v in ipairs(full_group_data.members) do
+           if v.name ~= char_data.name then
+               menustring = menustring .. (((hidden_members[v.name] == nil) and "+") or "") .. v.name .. "|"
+               member_count = member_count + 1
+               table.insert(member_names, v.name)
+           end
+       end
    else
-      full_right_click_menu(menustring, member_count, member_names)
+    --   print("Condition failed:")
+       if not full_group_data then print("full_group_data is nil") end
+       if not full_group_data.members then print("full_group_data.members is nil") end
+       if not char_data then print("char_data is nil") end
+       if not char_data.name then print("char_data.name is nil") end
+   end
+
+   if ultracompact then
+       ultracompact_right_click_menu(menustring, member_count, member_names)
+   else
+       full_right_click_menu(menustring, member_count, member_names)
    end
 end -- right_click_menu
 
@@ -1083,7 +1097,7 @@ function full_right_click_menu (menustring, member_count, member_names)
    menustring = menustring..((number_style==1 and "+") or "").."Standard|"
    menustring = menustring..((number_style==2 and "+") or "").."Percentages|"
    menustring = menustring..((number_style==3 and "+") or "").."Standard+Percentages|"
-   menustring = menustring.."<|-|>HP Thresholds|>First|"..(((thresh1active == 1) and "+") or "").."Activate|Set Percent ("..thresh1percent.."%)|Set Gauge Color ("..RGBColourToName(thresh1color)..")|<|>Second|"..(((thresh2active == 1) and "+") or "").."Activate|Set Percent ("..thresh2percent.."%)|Set Gauge Color ("..RGBColourToName(thresh2color)..")|<|<|>Sort By...|"..((sort_hp_which == "percent") and "+" or "").."% Damage|"..((sort_hp_which == "total") and "+" or "").."Total Damage|-|"..((sort_quests == 1) and "+" or "").."Players On Quests Go Last|<|-|Bring To Front|Send To Back|-|Reset Defaults"
+   menustring = menustring.."<|-|>HP Thresholds|>First|"..(((thresh1active == 1) and "+") or "").."Activate|Set Percent ("..thresh1percent.."%)|Set Gauge Color ("..RGBColourToName(thresh1color)..")|<|>Second|"..(((thresh2active == 1) and "+") or "").."Activate|Set Percent ("..thresh2percent.."%)|Set Gauge Color ("..RGBColourToName(thresh2color)..")|<|<|>Sort By...|"..((sort_hp_which == "percent") and "+" or "").."% Damage|"..((sort_hp_which == "total") and "+" or "").."Total Damage|-|"..((sort_quests == 1) and "+" or "").."Players On Quests Go Last|<|-|Bring To Front|Send To Back|-|Reset Defaults|-|Show Enemies (Not working yet)"
 
    local result = WindowMenu (win,
       WindowInfo (win, 14),  -- x position
@@ -1266,8 +1280,10 @@ function full_right_click_menu (menustring, member_count, member_names)
          width            = default_width
          show_coords      = 0
          WindowResize(win, width, height, Theme.PRIMARY_BODY)
-      end -- if
-
+   elseif numResult == member_count+39 then
+         -- Add show/hide enemies toggle
+   toggleEnemies()
+end -- if
       -- save and reload
       SaveState()
       RemoveMembersFromGroupDisplay()
@@ -1307,6 +1323,19 @@ function hidePlayer( name, line, wildcards )
    OnPluginInstall()
 end
 
+function toggleEnemies()
+   show_enemies = (((show_enemies == 0) and 1) or 0)
+   if (show_enemies == 0) then
+       ColourNote("yellow", "", "You will no longer see enemies in the group monitor.")
+   else
+       ColourNote("yellow", "", "You will now see enemies in the group monitor.")
+   end
+   -- save and reload
+   SaveState()
+   RemoveEnemiesFromGroupDisplay()
+   OnPluginInstall()
+end
+
 function toggleInRoom()
    in_room = (((in_room == 0) and 1) or 0)
    if (in_room == 0) then
@@ -1343,45 +1372,48 @@ end
 -- Called when plugin receives telnet data - main entry point for actually running
 -- the plugin.
 --=================================================================================
-function OnPluginBroadcast (msg, id, name, text)
+function OnPluginBroadcast(msg, id, name, text)
    -- Look for GMCP handler.
-   if (id == '3e7dedbe37e44942dd46d264') then
-      if (text == 'reload') then
-         -- invalidate current data
-         group_built = false
-         self_built = false
-         return
-      end
+   if id == '3e7dedbe37e44942dd46d264' then
+       if text == 'reload' then
+           -- invalidate current data
+           group_built = false
+           self_built = false
+           return
+       end
 
-      if (text=="char.base") then
-         char_data = gmcp("char.base")
-         self_built = true
-         if group_built then
-            RemoveMembersFromGroupDisplay()
-            RemoveEnemiesFromGroupDisplay()  -- Added to update enemies display
-            DisplayGroupPage()
-         end
-      end
-
-      if (text == "group") then
-         full_group_data = gmcp("group")
-         if (full_group_data.groupname == "") then
-            leaveGroup()
-         else
-            group_built = true
-            if self_built then
+       if text == "char.base" then
+           char_data = gmcp("char.base")
+           char_data.name = char_data.name or gmcp("char.base.name")  -- Ensure name is set
+  --         print("char_data populated:", serialize_table(char_data))
+           self_built = true
+           if group_built then
                RemoveMembersFromGroupDisplay()
-               RemoveEnemiesFromGroupDisplay()
+               RemoveEnemiesFromGroupDisplay()  -- Added to update enemies display
                DisplayGroupPage()
-            else
-               Send_GMCP_Packet("request char")
-            end
-         end
-      end
-   elseif (id == "462b665ecb569efbf261422f" and msg==996 and text == "re-register z") then
-      CallPlugin("462b665ecb569efbf261422f", "registerMiniwindow", win)
+           end
+       end
+
+       if text == "group" then
+           full_group_data = gmcp("group")
+           if full_group_data.groupname == "" then
+               leaveGroup()
+           else
+               group_built = true
+               if self_built then
+                   RemoveMembersFromGroupDisplay()
+                   RemoveEnemiesFromGroupDisplay()
+                   DisplayGroupPage()
+               else
+                   Send_GMCP_Packet("request char")
+               end
+           end
+       end
+   elseif id == "462b665ecb569efbf261422f" and msg == 996 and text == "re-register z" then
+       CallPlugin("462b665ecb569efbf261422f", "registerMiniwindow", win)
    end
 end
+
 
 function ResizeMoveCallback()
    if GetPluginVariable("c293f9e7f04dde889f65cb90", "lock_down_miniwindows") == "1" then
@@ -1487,6 +1519,7 @@ function OnPluginSaveState()
    SetVariable("show_mv", show_mv)
    SetVariable("show_quest", show_quest)
    SetVariable("show_tnl", show_tnl)
+   SetVariable("show_enemies", show_enemies)
    SetVariable("sort_hp_which", sort_hp_which)
    SetVariable("sort_quests", sort_quests)
    SetVariable("hidden", hidden)
@@ -1591,6 +1624,15 @@ function OnPluginInstall()
    -- Draw the initial group window
    SetUpHotspotsAndDraw(true)
 end
+
+function serialize_table(t)
+   local serialized_values = {}
+   for k, v in pairs(t) do
+      table.insert(serialized_values, k .. "=" .. tostring(v))
+   end
+   return "{" .. table.concat(serialized_values, ", ") .. "}"
+end
+
 
 function getmemoryusage()
   collectgarbage('collect')
