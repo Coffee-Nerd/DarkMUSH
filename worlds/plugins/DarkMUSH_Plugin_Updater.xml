@@ -11,7 +11,7 @@
    save_state="y"
    date_written="2022-10-24 00:00:00"
    requires="4.00"
-   version="2.20"
+   version="2.25"
    >
 
 </plugin>
@@ -315,8 +315,8 @@ function renderPluginInfo(build_res, build_Len, ghName, pluginId)
     TellUnicodeColours("│ @x238[@R" .. build_res .. "@x238] @x208" .. ghName .. " ")
     pluginlinelength = #ghName + 6
     if IsPluginInstalled(hpmVar["cache"][pluginId]["pluginId"]) then
-        local localVersion = tonumber(hpmVar["cache"][pluginId]["localVersion"])
-        local webVersion = tonumber(hpmVar["cache"][pluginId]["webVersion"])
+        local localVersion = tonumber(hpmVar["cache"][pluginId]["localVersion"]) or 0
+        local webVersion = tonumber(hpmVar["cache"][pluginId]["webVersion"]) or 0
         if localVersion < webVersion then
             needUpdate = true
             pluginlinelength = pluginlinelength + #tostring(localVersion) + 4 + #tostring(webVersion) + 8 + 10 -- This is for "[Update] "
