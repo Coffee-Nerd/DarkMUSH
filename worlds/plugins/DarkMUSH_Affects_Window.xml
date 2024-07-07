@@ -1,0 +1,1093 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+<!-- Saved on Sunday, July 03 2019 .06-pre -->
+
+<muclient>
+<plugin
+name="DarkMUSH_Affects_Window"
+author="Demon"
+id="353de94ba6c43260d839e256"
+save_state="y"
+language="Lua"
+purpose="Showing affects in a window"
+date_written="2019-07-03 12:04:56"
+requires="5.00"
+version="2.0"
+>
+
+</plugin>
+
+<!--  Timers  -->
+
+<timers>
+  <timer
+      script="PlayAllMovieFrames"
+      enabled="y"
+      second="0.1"
+      active_closed="y"
+      >
+
+  </timer>
+</timers>
+
+
+<!--  Aliases  -->
+
+<aliases>
+  <alias
+      regexp="y"
+      match="^affects window$"
+      enabled="y"
+      sequence="100"
+      script="Toggle"
+      >
+  </alias>
+    <alias
+      regexp="y"
+      match="^affects test$"
+      enabled="y"
+      sequence="100"
+	  send_to="12"
+      ><send></send>
+  </alias>
+  <alias
+      regexp="y"
+      match="^affects window debug$"
+      enabled="y"
+      sequence="100"
+      script="ToggleDebug"
+      >
+  </alias>
+</aliases>
+
+<!--  Triggers  -->
+
+<triggers>
+    <trigger
+      enabled="y"
+      match="^\{affon\}(?P<spell>\d+)\,(?P<duration>\d+)$"
+      regexp="y"
+      send_to="12"
+      sequence="100"
+	  omit_from_output="y"
+      script="AddAffectTimed"
+      >
+  </trigger>
+      <trigger
+      enabled="y"
+      match="^\{affoff\}(?P<affect>\d+)$"
+      regexp="y"
+      send_to="12"
+      sequence="100"
+	  omit_from_output="y"
+      script="RemoveAffect"
+      >
+  </trigger>  
+</triggers>
+
+<!--  Script  -->
+
+<script>
+  <![CDATA[
+	require "movewindow"
+	require "mw"
+	require "mw_theme_base"
+	require "tprint"
+	require "serialize"
+    require "movewindow"
+	require "gmcphelper"
+	require "utility"
+	dofile(GetInfo(60).."telnet_options.lua"); TelnetOptionOn(TELOPT_SPELLUP)
+    dofile(GetInfo(60).."darkwiz_colors.lua")
+
+	-- Miniwindow State
+	local winid = "win_"..GetPluginID()
+	local version = "2.00"
+	local hiddenWindow = winid.."text_background_offscreen"
+	local bg_color = "#000000"
+	local last_refresh = 1 -- last window refresh
+	local pos_x = GetVariable("pos_x") or 100
+	local pos_y = GetVariable("pos_y") or 100
+	local font_size = 8
+	local font_name = "Lucida Console"
+	local window_visible = true -- always start out with visible window
+	local title = "Affects Window"
+	local win_height = tonumber(GetVariable("win_height")) or 400
+	local win_width = tonumber(GetVariable("win_width")) or 440
+	local grip_resize = 10 -- resize grip size
+	local timer_color = Theme.BODY_TEXT
+    -- the width and height of each image
+    local image_size = GetVariable("image_size") or 32
+    -- How tall each row of text is (for the timers)
+    local text_height = 20
+    -- The space between the icon and the text
+    local text_margin_top = 2
+	COOLDOWN_TEXT_COLOUR = ColourNameToRGB "yellow"
+	tick_prefix = "This is a huge test:"
+	current_time = ""
+	
+
+     -- When each spell will run out
+    end_times = {}
+
+	-- Global Vars
+	infos = {} -- this table is filled with the info of every gif
+	affects = {}
+	warned_about_missing_files = false
+	-- In game name to filename map
+
+	affect_icons = {
+	   ["68"] = "invis",
+	   ["94"] = "nayrus_love",
+	   --["180"] = "nayrus_love",
+	   ["10"] = "blind",
+	   ["35"] = "curse",
+	   ["103"] = "sleep",
+	   ["329"] = "haste",
+	   --["180"] = "haste",
+	   ["374"] = "surge",
+	   ["hungry"] = "hungry",
+	   ["thirsty"] = "thirsty"}
+
+    -- We are using this as a set, these affects should be removed from the window
+    -- and not draw a disabled state
+    bad_affects = {
+       ["10"] = "blind",
+	   ["35"] = "curse",
+	   ["103"] = "sleep"
+    }
+
+
+	spelllist = {
+		{
+		  name="Sanctuary",
+		  tooltip="Sanctuary",
+		  text="Sanctuary",
+		  send="c sanc",
+		  filename="worlds\\plugins\\images\\affects\\nayrus_love_%03i.png",
+		  disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		}, 
+		{ 
+		name="Haste",
+		tooltip="Haste",
+		text="Haste",
+		send="c haste",
+		filename="worlds\\plugins\\images\\affects\\haste_%03i.png",
+		disabled_filename="worlds\\plugins\\images\\affects\\haste_down.png",
+	  },  
+	  { 
+		name="Elemental Focus Fire",
+		tooltip="Elemental Focus Fire",
+		text="Elemental Focus Fire",
+		send="c \'elemental focus\' fire",
+		filename="worlds\\plugins\\images\\affects\\elementalfocus_%03i.png",
+		disabled_filename="worlds\\plugins\\images\\affects\\elementalfocus_down.png",
+	  },  
+	  { 
+		name="Invis",
+		tooltip="Invis",
+		text="Invis",
+		send="c invis",
+		filename="worlds\\plugins\\images\\affects\\invis_%03i.png",
+		disabled_filename="worlds\\plugins\\images\\affects\\invis_down.png",
+	  },  
+
+	  } -- end of spell table
+
+	  buttons = {
+ 
+		-- Priority 1
+	  { name = "Button1",
+		tooltip="Sanctuary",
+		text="Sanctuary",
+		send="c sanc",
+		filename="worlds\\plugins\\images\\affects\\nayrus_love_%03i.png",
+		disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	  },   -- end of Button 1
+	   
+		-- Button 2
+	  { name = "Button2",
+	    tooltip="Sanctuary",
+	    text="Sanctuary",
+	    send="c sanc",
+	    filename="empty",
+	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		}, -- end of Button 2
+	   
+		-- Button 3
+	  { name = "Button3",
+        tooltip="Sanctuary",
+	    text="Sanctuary",
+	    send="c sanc",
+	    filename="empty",
+	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		}, -- end of Button 3
+	   
+		-- Button 4
+	  { name = "Button4",
+	    tooltip="Sanctuary",
+	    text="Sanctuary",
+	    send="c sanc",
+	    filename="empty",
+	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		}, -- end of Button 4
+	   
+		-- Button 5
+	  { name = "Button5",
+	    tooltip="Sanctuary",
+	    text="Sanctuary",
+	    send="c sanc",
+	    filename="empty",
+	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		}, -- end of Button 5
+	   
+		-- Button 6
+	  { name = "Button6",
+	    tooltip="Sanctuary",
+	    text="Sanctuary",
+	    send="c sanc",
+	    filename="empty",
+	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		}, -- end of Button 6
+	   
+		-- Button 7
+	  { name = "Button7",
+	    tooltip="Sanctuary",
+	    text="Sanctuary",
+	    send="c sanc",
+	    filename="empty",
+	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		}, -- end of Button 7
+	   
+		-- Button 8
+	  { name = "Button8",
+	    tooltip="Sanctuary",
+	    text="Sanctuary",
+	    send="c sanc",
+	    filename="empty",
+	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		}, -- end of Button 8
+	   
+		-- Button 9
+	  { name = "Button9",
+	    tooltip="Sanctuary",
+	    text="Sanctuary",
+	    send="c sanc",
+	    filename="empty",
+	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		}, -- end of Button 9
+
+	   		-- Button 10
+	  { name = "Button10",
+	    tooltip="Sanctuary",
+	    text="Sanctuary",
+	    send="c sanc",
+	    filename="empty",
+	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	  }, -- end of Button 10
+	 
+	   --> add more priorities here
+	   
+	   
+	  } -- end of priorities table
+	  
+	  assert (loadstring (GetVariable ("saved_buttons") or "saved_buttons = nil")) ()
+
+if (saved_buttons) then
+  buttons = saved_buttons
+end
+
+	path_prefix = "worlds\\plugins\\images\\affects\\"
+    debug = GetVariable("debug") or "false"
+    pulse_length = 1
+
+	function NotifyNote(message)
+	   ColourNote ("Green", "", message)
+	end
+
+	function ErrorNote(message)
+	   ColourNote ("Red", "", message)
+	end
+
+	function DebugNote(message)
+		if debug == "true" then
+			Note(message)
+		end
+		 end
+
+	function Toggle()
+	   window_visible = not window_visible
+   if not window_visible then -- remove window
+	   WindowDelete(winid)
+   else
+	   window(true)
+   end
+	end
+
+	function ToggleDebug()
+		if debug == "false" then
+			debug = "true"
+			print(debug)
+			SetVariable("debug", "true")
+			utilprint("$x238Affects window Debug is now $GON$x238.")
+		else
+			debug = "false" 
+			print(debug)
+			utilprint("$x238Affects window Debug is now $ROFF$x238.")
+			SetVariable("debug", "false")
+		end
+	  SaveState()
+	end
+
+
+	-- --------------------------------------------------------------------
+	-- AddAffect (name, line, wildcards)
+	-- wildcards[1] must be in affect_icons table, otherwise prompt user for icons
+	-- --------------------------------------------------------------------
+	function AddAffectTimed(spell, duration)
+	   DebugNote("AddAffectTimed")
+    --   print("Spell: " .. spell)
+    --   print("Duration: " .. duration)
+       if(spell ~= nil and duration ~= nil) then
+           DebugNote("Spell: " .. spell)
+           DebugNote("Duration: " .. duration)
+		   spell = string.gsub(spell, " ", "_")
+           local k, v = FindAffectInInfos(spell)
+           if (k == -1 and duration > 0 and affect_icons[spell] ~= nil) then
+               DebugNote("Adding New Timed Affect")
+               PlaceNewGIF(path_prefix .. affect_icons[spell], nil, duration, true)
+           --    DebugNote(string.format("%02d:%02d:%02d", hours, minutes, seconds))
+           --    DebugNote("timer retval: " .. AddTimer(spell, hours, minutes, seconds, "", timer_flag.Enabled + timer_flag.OneShot, "RemoveAffectTimed"))
+           --    DebugNote("timer: " .. GetTimer(spell))
+               DebugNote(infos.x)
+               --  local i, v = FindAffectInInfos(spell)
+               --  tprint(FindAffectInInfos(spell)[1])
+            elseif (duration > 0 and affect_icons[spell] ~= nil) then
+              v.enabled = true
+              v.ticks_left = duration
+	        end -- if
+       end -- if
+	end -- AddEffectTimed
+
+	-- --------------------------------------------------------------------
+	-- RemoveAffectTimed (name, line, wildcards)
+	-- wildcards[1] must be an active effect
+	-- --------------------------------------------------------------------
+	function RemoveAffectTimed(name, line, wildcards)
+	   DebugNote("RemoveAffectTimed")
+	   name = string.gsub(name, "_", " ")
+	   DebugNote(name)
+
+
+       if(name ~= nil) then
+           local k, v = FindAffectInInfos(name)
+	       DebugNote("k:" .. tostring(k))
+           if (k >= 0) then
+	         DebugNote("Setting affect to off " .. tostring(k))
+             spell = affect_icons[name]:lower()
+			 DebugNote("Spell: " .. spell)
+             if(affect_icons[new_affect] ~= nil) then
+               DebugNote("Showing disabled icon for "..spell)
+	          -- table.remove(infos, k)
+             else
+               DebugNote("Ignoring spell, no known icon "..spell)
+             end
+
+	    --     window(true) -- Redraw   (THIS WAS CAUSING FLICKERING)
+           end -- if
+	      end -- if
+	end -- RemoveAffect
+
+	-- --------------------------------------------------------------------
+	-- RemoveAffect (name, line, wildcards)
+	-- wildcards[1] must be an active effect
+	-- --------------------------------------------------------------------
+	function RemoveAffect(name, line, wildcards)
+		DebugNote(name)
+		name = string.gsub(name, "_", " ")
+		DebugNote("RemoveAffect")
+		if(name ~= nil) then
+			local k, v = FindAffectInInfos(name)
+			if affect_icons[name] then
+				affect = affect_icons[name]:lower()
+			--	print("Affect: " .. affect)
+				if (k >= 0) then
+					if (bad_affects[name]) then
+						DebugNote("Removing bad affect " .. tostring(k))
+						table.remove(infos, k)
+						--tprint(infos)
+						v.enabled = false
+						-- Clear out the pixels of where the removed spell is going to be, and then draw it again using PlayMovieFrame (v)
+						WindowRectOp (winid, 2, movieInfo.x, movieInfo.y, movieInfo.x + image_size, movieInfo.y + image_size, ColourNameToRGB("bg_color"))
+						WindowRectOp (winid, 2, movieInfo.x, movieInfo.y + image_size + text_margin_top, movieInfo.x+image_size, movieInfo.y + image_size + text_margin_top + text_height, ColourNameToRGB("bg_color"))
+						bad_affect = true
+						DebugNote("BAD AFFECT: ", bad_affect)
+						PlayMovieFrame (v) -- this is added in place of window(true) to avoid the flickering (MAYBE MOVE BACK DOWN TO WINDOW(TRUE) SPOT)
+					else
+						DebugNote("Showing disabled icon for "..spell)
+						bad_affect = false
+						v.enabled = false
+						affect = string.gsub(affect, " ", "_")
+						DebugNote(affect)
+						DebugNote(DeleteTimer(affect))
+					end
+				else
+					DebugNote("Affect not found in infos for: " .. name)
+				end
+			else
+				DebugNote("affect_icons entry not found for: " .. name)
+			end
+		else
+			DebugNote("Name is nil")
+		end
+	end
+
+	  function FindAffectInInfos(name)
+		for k, v in pairs(infos) do
+		if (affect_icons[name] ~= nil and string.match(v.filename, affect_icons[name]) ~= nil) then
+			  return k, v
+		end
+		 end
+		  return -1, -1
+		   end -- FindAffectInInfos
+
+		   function GetNumFrames(filename)
+			return GetNumFramesHelper(filename, 0)
+		 end -- GetNumFrames
+	 
+		 function GetNumFramesHelper(filename, i)
+			old_filename = filename
+			filename = string.format (filename, i + 1)
+			DebugNote("filename_numframehelp = " .. filename)
+			local f = io.open(filename, "r")
+		if f ~= nil and i < 1000 then
+			io.close(f)
+			filename = old_filename
+			return GetNumFramesHelper(filename, i + 1)
+		else
+			DebugNote("f no exists::i=" .. tostring(i))
+			   return i
+			end
+		 end -- GetNumFrames
+
+	-- --------------------------------------------------------------------
+	-- PlayGif (info)
+	--  info.filename (eg. "/frames/my_Gif_%03i.png" )
+	--  info.frames   (eg. 10, if the Gif consists of 10 files)
+	--  info.x   - X position on screen
+	--  info.y   - Y position on screen
+
+	--  Suggested conversion:
+	--    ffmpeg -ss "00:30" -i INPUTFILE.mp4 -t 1     -r 10 -s 720x404 frames/my_Gif_%03i.png
+	--                ^^^^          ^^^       ^^^^     ^^^^^    ^^^^^^^    ^^^^^^^^^^
+	--           Start time      input file  how long   FPS       size      output files
+	-- --------------------------------------------------------------------
+
+	function PlayMovie (info)
+		movieInfo = info
+	if not info then
+		return
+	end -- if
+ 
+		assert (type (movieInfo) == "table",
+		"Argument to PlayMovie should be a table")
+ 
+		-- see if already in table
+		if infos [info.filename] then
+		   --return
+		end -- if already there
+ 
+		local gotErrors = false
+ 
+	-- load the disabled frame into memory
+	if not WindowImageInfo(winid, movieInfo.disabled_filename, 2) then
+		local result = WindowLoadImage(winid, movieInfo.disabled_filename, movieInfo.disabled_filename)
+	end
+ 
+		-- load each movie frame into memory, if not already done
+	for i = 1, movieInfo.frames do
+	local filename = string.format (movieInfo.filename, i)
+	if not WindowImageInfo(winid, filename, 2) then
+		local result = WindowLoadImage(winid, filename, filename)
+ 
+	if result ~= error_code.eOK then
+		ErrorNote ("Could not open move frame file:")
+		ErrorNote ("   -> " .. filename)
+		ErrorNote ("   Reason: " .. error_desc [result])
+		gotErrors = true
+	end -- if
+	 end -- if
+	  end -- for each frame
+ 
+ 
+		-- if couldn't do it, discard the movie info
+	if gotErrors then
+		movieInfo = nil
+	return
+	end -- if
+ 
+		-- otherwise, start at frame 1
+		movieInfo.currentFrame = 1
+ 
+		-- put into table of infos
+		table.insert(infos, movieInfo)
+	 end -- PlayMovie
+
+	-- --------------------------------------------------------------------
+	-- PlayMovieFrame - show current frame, advance count
+	-- --------------------------------------------------------------------
+	function PlayMovieFrame (movieInfo)
+		-- timing stuff
+		timeTaken = timeTaken or 0
+		frameCount = frameCount or 0
+ 
+		local startTime = utils.timer ()
+		local filename
+		local errorCode
+		
+		local imageWidth = image_size
+		local imageHeight = image_size
+		-- Draw the correct frame number if the spell is enabled, otherwise draw the disabled image
+		if (movieInfo.enabled) then
+		  filename = string.format (movieInfo.filename, movieInfo.currentFrame)
+		  errorCode = WindowDrawImage (winid, filename, movieInfo.x, movieInfo.y, movieInfo.x + imageWidth, movieInfo.y + imageHeight, miniwin.image_stretch)
+		else
+		  filename = movieInfo.disabled_filename
+ 
+		  -- Because this is a partially transparent image, need to clear out any pixels before drawing
+		  --TODO: ADD IF STATEMENT BELOW TO ONLY DO THIS WINDOWRECTOP IF ITS A BADEFFECT, OTHERWISE DON'T
+		  WindowRectOp (winid, 2, movieInfo.x, movieInfo.y, movieInfo.x + imageWidth, movieInfo.y + imageHeight, ColourNameToRGB("bg_color"))
+		  if WindowInfo("hiddenWindow", 4) == nil then
+			 DebugNote("No hidden window, creating it now!")
+			 WindowCreate (hiddenWindow, 0, 0, 0, 0, 12, 3, ColourNameToRGB(bg_color))
+		 end
+ 
+		  -- Here we need to draw the image in a hidden window, resize that window, draw the image transparently, and later draw it stretched
+		  image_down = filename
+ 
+		  if WindowLoadImage (hiddenWindow, image_down, filename) == 0 then
+			 WindowResize (hiddenWindow, WindowImageInfo(hiddenWindow, image_down, 2), WindowImageInfo(hiddenWindow, image_down, 3), ColourNameToRGB(bg_color))
+			 WindowDrawImageAlpha (hiddenWindow, image_down, 0, 0, 0, 0, 0.3)
+			 WindowImageFromWindow(winid, image_down, hiddenWindow)
+		  end
+		-- if not string.match(image_down, "%w+_down.png") then 
+			 DebugNote(path_prefix)
+		  -- Now go ahead and draw the image (used to be alpha, and instead of stretch, 0.5)
+		  if bad_affect == false then
+		  errorCode = WindowDrawImage (winid, image_down, movieInfo.x, movieInfo.y, movieInfo.x + imageWidth, movieInfo.y + imageHeight, miniwin.image_stretch)
+		  WindowRectOp (winid, 2, movieInfo.x,  movieInfo.y + image_size + text_margin_top, movieInfo.x+image_size,  movieInfo.y + image_size + text_margin_top + text_height, ColourNameToRGB("bg_color"))
+		  else
+			 errorCode = error_code.eOK
+			 WindowRectOp (winid, 2, movieInfo.x,  movieInfo.y + image_size + text_margin_top, movieInfo.x+image_size,  movieInfo.y + image_size + text_margin_top + text_height, ColourNameToRGB("bg_color"))
+		  -- Now set the down_image to nothing, so it can draw the next one.
+			  image_down = 0
+		  end
+
+		end
+		--long WindowDrawImage(BSTR WindowName, BSTR ImageId, long Left, long Top, long Right, long Bottom, short Mode, long SrcLeft, long SrcTop, long SrcRight, long SrcBottom);
+ 
+					  -- Redraw icons
+	if (#infos >= 1) then
+	 tmp_infos = infos
+	 infos = {}
+	 warned = false
+ for i, v in ipairs(tmp_infos) do
+	 x, y = FindNextPos(image_size+2)
+	 v.x = x
+	 v.y = y
+ if(not warned and (x > win_width or y > win_height)) then
+	 warned = true
+	 Note("Your Affects window is too small to show all the icons, make it bigger!")
+ end
+	 table.insert(infos, v)
+  end
+ end
+ 
+		if errorCode ~= error_code.eOK then
+		ErrorNote ("Could not draw image: " .. filename)
+		end -- if
+		if IsConnected() then -- only count down the timer/redraw when you're connected to the game
+		end_time = os.time()
+		current_time = duration
+		CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
+		end
+ 
+		-- next frame
+		movieInfo.currentFrame = movieInfo.currentFrame + 1
+ 
+		-- wrap
+	if movieInfo.currentFrame > movieInfo.frames then
+		movieInfo.currentFrame = 1
+	end -- if
+ 
+		-- add up how long we took doing this
+		timeTaken = timeTaken + utils.timer () - startTime
+		-- and how many times
+		frameCount = frameCount + 1
+	 end -- PlayMovieFrame
+		lastRefresh = 0
+	function time_left()
+	   duration = duration -
+	   DebugNote(duration)
+   if duration then
+       return string.format("%2i", duration)
+   else
+       return "??"
+   end
+    end
+
+	-- --------------------------------------------------------------------
+	-- PlayAllMovieFrames - called by a timer every 1/10 second - calls
+	--                      PlayMovieFrame for each movie in the table
+	-- --------------------------------------------------------------------
+	function PlayAllMovieFrames (timerName)
+		for i, j in ipairs(infos) do
+			if (infos[i].enabled) then
+				-- Only display the timer if the spell is enabled
+				local spell_timer = infos[i].ticks_left or 0
+ 
+				if spell_timer >= 30 then
+				timer_color = ColourNameToRGB("lime")
+				elseif spell_timer <= 29 and spell_timer >= 10 then
+				timer_color = ColourNameToRGB("yellow")
+				elseif spell_timer <= 9 then
+				timer_color = ColourNameToRGB("red")
+				end
+		 --	    for k, v in pairs (infos) do
+				WindowRectOp (winid, 2, infos[i].x, infos[i].y + image_size + text_margin_top, infos[i].x+image_size, infos[i].y + image_size + text_margin_top + text_height, ColourNameToRGB("bg_color"))
+				
+				-- [DONE]TODO: Center the text using WindowTextWidth to compute text width before hand 
+			   timerWidth = WindowTextWidth(winid, "font", spell_timer)
+			   if timerWidth <= 99 then
+				 timerWidth = timerWidth + 8
+			   elseif timerWidth <= 9 then
+				 timerWidth = timerWidth + 16
+			   end
+			 --  DebugNote(timerWidth)
+				WindowText(winid, "font", spell_timer, infos[i].x + image_size/4, infos[i].y + image_size + text_margin_top, 0, 0, timer_color)
+			end
+		end
+ 
+	for k, v in pairs (infos) do
+ 
+		-- We need to redraw if any of the following are true:
+		-- 1) v.lastDrawState == nil - the frame has never been drawn
+		-- 2) v.enabled is true - the animation is showing, needs to be updated every frame
+		-- 3) v.lastDrawState ~= v.enabled - we are switching from enabled to disabled
+		if (v.lastDrawState == nil or v.enabled or v.lastDrawState ~= v.enabled) then
+			PlayMovieFrame (v)
+		end
+ 
+		v.lastDrawState = v.enabled
+	end
+ 
+	end -- PlayAllMovieFrames
+
+---------------------------------------UTILITY FUNCTIONS START-------------------------------------------------
+	function swap(table1, table2, name)
+		local tmp = table1[name]
+		table1[name] = table2[name]
+		table2[name] = tmp
+	end
+
+	function TableLength(T)
+	   local count = 0
+	   for _ in pairs(T) do count = count + 1 end
+	   return count
+	end
+
+	function utilprint(string)
+		AnsiNote(ColoursToANSI(string))
+	  end
+
+---------------------------------------UTILITY FUNCTIONS END----------------------------------------------------
+
+	-- 16x16 at top, 32x32 below
+	-- Offsets due to window border
+	x_off = 2
+	y_off = 18
+	gif_size = image_size
+	-- --------------------------------------------------------------------
+	-- PlaceNewGif (filename, frames)
+	--  filename (eg. "bread" ), expected to be in worlds/plugins/images/frames/filename_%03i.png
+	-- --------------------------------------------------------------------
+	function PlaceNewGIF(filename, frames, duration, enabled)
+		local disabled_filename = filename.."_down.png"
+		filename = filename.."_%03i.png"
+    --    print("placing gif")
+		DebugNote("PlaceNewGIF")
+		DebugNote("filename: " .. filename)
+		local rows = math.floor(win_height / gif_size)
+		local cols = math.floor(win_width / gif_size)
+		local frames = GetNumFrames(filename)
+		DebugNote("frames: " .. tostring(frames))
+		DebugNote("win_width " .. win_width)
+		DebugNote("win_height " .. win_height)
+		DebugNote("row " .. rows)
+		DebugNote("col " .. cols)
+	if (frames ~= 0) then
+		num_gifs = #infos
+		movieInfo = info
+ 
+		-- Find position
+	--	print("Duration in placenewgif: " .. duration)
+		x,y = FindNextPos(image_size+2)
+		PlayMovie {
+		filename = filename,
+		disabled_filename = disabled_filename,
+		frames = frames,
+		x = x,
+		y = y,
+		enabled = enabled,
+		ticks_left = duration}
+	elseif(not warned_about_missing_files) then
+		warned_about_missing_files = true
+		ErrorNote ("Could not find any frames matching " .. filename)
+	end
+
+	 -- this is used to swap entries in the INFOS table when a filename in the buttons table matches a filename in the infos table
+	 for i, j in ipairs(infos) do
+		if (infos[i].enabled) then
+		 for n, v in ipairs (buttons) do
+			 if infos[i].filename == v.filename and (i ~= n) then
+				 swap(infos[i], infos[n], "filename")
+				 swap(infos[i], infos[n], "disabled_filename")
+				 swap(infos[i], infos[n], "enabled")
+				 swap(infos[i], infos[n], "frames")
+				 swap(infos[i], infos[n], "lastDrawState")
+				 swap(infos[i], infos[n], "ticks_left")
+				 swap(infos[i], infos[n], "currentFrame")
+			 end 
+			end
+		end
+	end
+	
+	 end
+
+     function do_tick()
+        for k, v in ipairs(infos) do
+            if v.enabled then
+                v.ticks_left = v.ticks_left - 1
+                if v.ticks_left <= 0 then
+                    RemoveAffect(v.filename)
+                end
+            end
+        end
+    end
+
+ --SHOULD THIS BE IMAGE_SIZE??
+	 function FindNextPos(size)
+		rows = math.floor(win_height / size)
+		cols = math.floor(win_width / size)
+		cur_col = math.floor((#infos) % cols)
+		cur_row = math.floor((#infos)/ cols) >= 0 and math.floor((#infos)/ cols) or 0
+		x = x_off + cur_col*size
+		y = y_off + cur_row*size + cur_row * (text_height + text_margin_top) 
+		return x, y
+	 end
+ 
+ 
+	 function window(redraw)
+		DebugNote("window(" .. tostring(redraw) .. ")")
+		if not window_visible then
+		   return
+		end
+ 
+	if redraw then
+		WindowDelete("winid")
+		WindowCreate(winid, pos_x, pos_y, win_width, win_height, 0, 0, ColourNameToRGB(bg_color))
+		WindowPosition(winid, pos_x, pos_y, 0, 2)
+		WindowSetZOrder(winid, 201)
+		WindowFont(winid, "f1", font_name, font_size, false, false, false, false)
+		WindowFont(winid, "b1", font_name, font_size, true, false, false, false)
+		WindowFont(winid, "s1", font_name, font_size - 1, false, false, false, false)
+		movewindow.install(winid, 6, 2, true, nil, {mouseup=MouseUp, mousedown=MouseDown, dragmove=LeftClickOnly, dragrelease=LeftClickOnly})
+		-- register with the z-order monitor
+		CallPlugin("462b665ecb569efbf261422f", "registerMiniwindow", winid)
+		movewindow.add_drag_handler (winid, 0, 0, 0, win_height)
+		WindowAddHotspot(winid, "resize", win_width - grip_resize, win_height - grip_resize, win_width, win_height, "MouseOver", "CancelMouseOver", "MouseDown", "", "MouseUp", "", 6, 0)
+		WindowDragHandler(winid, "resize", "ResizeMoveCallback", "ResizeReleaseCallback", 0)
+	else
+		WindowResize(winid, win_width, win_height, ColourNameToRGB(bg_color))
+		WindowMoveHotspot(winid, "resize", win_width - grip_resize, win_height - grip_resize, win_width, win_height)
+	   end
+		WindowShow(winid, true)
+		show_window()
+		end
+
+		function show_window()
+			WindowRectOp(winid, 2, 2, 1, -2, -2, ColourNameToRGB(bg_color)) -- blank canvas
+	 
+			title = "Affects Window" -- default title
+	 
+			Theme.DrawTitleBar(winid, "f1", title, "center") -- them window title (has to be drawn before border) This is the title bar that says the leader name
+			Theme.DrawBorder(winid) -- theme window border
+			left, top = 7, 17 -- bar location
+			across = 0
+			rows = 0
+			Theme.AddResizeTag(winid, 2, nil, nil, "MouseDown", "ResizeMoveCallback", "ResizeReleaseCallback") -- resize grip
+			PlayAllMovieFrames()
+			CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
+		 end
+	 
+		 function ResizeMoveCallback()
+			local x_offset, y_offset = start_x - WindowInfo(winid, 17), start_y - WindowInfo(winid, 18)
+			start_x, start_y = WindowInfo(winid, 17), WindowInfo(winid, 18)
+			win_width = win_width - x_offset
+			win_height = win_height - y_offset
+		if os.clock() - last_refresh >= .05 then
+			--DebugNote("redraw")
+			last_refresh = os.clock()
+			window(false)
+		end
+		 end
+	 
+		 function ResizeReleaseCallback()
+			window(true)
+			SaveState()
+		 end
+	 
+		 function MouseDown(flags, id)
+			 --print("MouseDown")
+		 if id == "resize" then
+			 start_x, start_y = WindowInfo(winid, 17), WindowInfo(winid, 18)
+		 end
+		 local x, y = WindowInfo(winid, 14), WindowInfo(winid, 15)
+		 --print("X: "..x.." Y: "..y)
+		 local n = tonumber (x)
+		 
+		 slot = -1
+	  for i, j in ipairs(infos) do
+		  if x > infos[i].x and x <= (infos[i].x + image_size) and y > infos[i].y and y < (infos[i].y + image_size) then
+			  clickableX = infos[i].x
+			  clickableY = infos[i].y	
+			  slot = i
+			  --tprint(infos[i])
+			  button = infos[i].filename
+			  buttonInfo = infos[i].enabled
+		  end
+	  end
+	  
+	  if slot == -1 then return end
+		  
+	  WindowRectOp (winid, 1, clickableX-2, clickableY-2, clickableX+image_size+2, clickableY+image_size+2, ColourNameToRGB("red"))
+	  
+		  end
+	 
+		  function find(tbl, val)
+			 for k, v in pairs(tbl) do
+				 if v == val then return k end
+			 end
+			 return nil
+		 end
+	 
+		 function MouseUp(flags, id, win)
+			if bit.band(flags, 0x20) ~= 0 then -- right click
+			   right_click_menu()
+			end
+			pos_x, pos_y = WindowInfo(winid, 10), WindowInfo(winid, 11)
+			SaveState()
+			if slot == -1 then return end
+			WindowRectOp (winid, 1, clickableX-2, clickableY-2, clickableX+image_size+2, clickableY+image_size+2, ColourNameToRGB("bg_color"))
+		   -- show_window() --MAYBE to clear the red line
+		   if buttonInfo ~= true then
+		 -- print(button)
+		  button = button:gsub("%worlds\\plugins\\images\\affects\\", "")
+		  button = button:gsub("%W%W%w+.png", "")
+		  --print("BUTTON: ",button)
+		  for k, v in pairs(affect_icons) do 
+		 if button == affect_icons[k] then
+			 key = find(affect_icons, button)
+			 Execute("c "..key)
+	 end
+	 end
+		 end
+		 end
+	 
+		 function right_click_menu(buttonIndex)
+			local x, y = WindowInfo(winid, 14), WindowInfo(winid, 15)
+			--print(x, y)
+			if slot == -1 then
+			local str = "!"
+	 
+			str = str.."Bring to Front"
+	 
+			str = str.."|-|Send to Back"
+			
+			str = str.."|-|Set images to small (32)"
+			
+			str = str.."|-|Set images to large (64)"
+	 
+			opt = WindowMenu(winid, x, y, str)
+	 
+			if opt == "" then
+			   return
+			end
+	 
+			opt = tonumber(opt)
+	 
+		if opt == 1 then -- Bring to Front
+			CallPlugin("462b665ecb569efbf261422f","boostMe", winid)
+			--  DebugNote("Bring to Front")
+		elseif opt == 2 then -- Send to back
+			CallPlugin("462b665ecb569efbf261422f","dropMe", winid)
+			--  DebugNote("Sent to Back")
+		elseif opt == 3 then -- Image size small
+			image_size = 32
+			SetVariable("image_size", image_size)
+		elseif opt == 4 then -- Image size large   
+			image_size = 64
+			SetVariable("image_size", image_size)
+		end
+	 end
+	 local options = {}
+	 -- generate the listbox options
+	 for k,v in ipairs(spelllist) do
+	   table.insert(options, v.name)
+	 end
+	 opt = utils.listbox ("Choose here from a list of spells", "Pick a spell for your button ...", options)
+	 if (opt == nil or opt == "") then
+		 return
+	 end
+	 buttonIndex = slot
+	 opt = tonumber(opt)
+	 -- buttonIndex contains the button we want to modify, opt is the spell we want to choose
+	 local chosenspell = spelllist[opt]
+	 local button = buttons[buttonIndex]
+	 --Replace all of button's properties with the spells
+	 DebugNote("Setting "..button.name.." to "..chosenspell.name)
+	 button.name = chosenspell.name
+	 button.text = chosenspell.text
+	 button.tooltip = chosenspell.tooltip
+	 button.send = chosenspell.send
+	 button.filename = chosenspell.filename
+	 button.disabled_filename = chosenspell.disabled_filename
+	 
+	 -- this is used to swap entries in the INFOS table when a filename in the buttons table matches a filename in the infos table
+	 for i, j in ipairs(infos) do
+		 if (infos[i].enabled) then
+		  for n, v in ipairs (buttons) do
+			  --	tprint(buttons)
+	  --print(movieInfo.filename)
+			  if infos[i].filename == v.filename and (i ~= n) then
+			  --   print("I: ",i)
+			  --	print("N: ",n)
+				  swap(infos[i], infos[n], "filename")
+				  swap(infos[i], infos[n], "disabled_filename")
+				  swap(infos[i], infos[n], "enabled")
+				  swap(infos[i], infos[n], "frames")
+				  swap(infos[i], infos[n], "lastDrawState")
+				  swap(infos[i], infos[n], "ticks_left")
+				  swap(infos[i], infos[n], "currentFrame")
+			  end 
+			 end
+		 end
+	 end
+	 
+		SaveState()
+			window(true)
+		 end
+
+	function CancelMouseOver(flags, id)
+	end
+
+	function CancelMouseDown(flags, id)
+	end
+
+	function SaveState()
+		SetVariable("pos_x", pos_x)
+		SetVariable("pos_y", pos_y)
+		SetVariable("win_width", win_width)
+		SetVariable("win_height", win_height)
+		SetVariable("debug", tostring(debug))
+		SetVariable("prompt_gag", tostring(prompt_gag))
+	 end
+
+
+	function loaded()
+		utilprint("$W--------------------------------------------------------------------------------")
+		utilprint("$WPlugin Name  : $RG$Yr$Ga$Cp$Bh$Mi$mc$Ra$Yl $x238Affects Window")
+		utilprint("$WAuthor       : $x238Demon")
+		utilprint("$WVersion      : $G" .. version)
+		utilprint("$W--------------------------------------------------------------------------------")
+		end
+
+	function OnPluginInstall()
+	   WindowFont(winid, "font", font_name, font_size, false, false, false, false, 0)
+	   window(true)
+	   
+	   DoAfterSpecial(.2, "loaded()", 12)
+	end
+
+    function OnPluginBroadcast (msg, id, name, text)
+
+
+        -- Look for GMCP handler.
+        if (id == '3e7dedbe37e44942dd46d264') then
+    
+            if (text == "affon") then
+                res, gmcparg = CallPlugin("3e7dedbe37e44942dd46d264","gmcpval","affon")
+                luastmt = "gmcpdata = " .. gmcparg
+                assert (loadstring (luastmt or "")) ()
+                spell = tonumber(gmcpval("spell"))
+                duration = tonumber(gmcpval("duration"))
+                print("affon : " ..spell.. " : " ..duration)
+                AddAffectTimed(spell, duration)
+            --	cast_queue()
+            end
+            if (text == "affoff") then
+                res, gmcparg = CallPlugin("3e7dedbe37e44942dd46d264","gmcpval","affoff")
+                luastmt = "gmcpdata = " .. gmcparg
+                assert (loadstring (luastmt or "")) ()
+                spell = tonumber(gmcpval("spell"))
+                RemoveAffect(spell)
+            end 
+            if text == "comm.tick" then
+                res, gmcparg = CallPlugin("3e7dedbe37e44942dd46d264","gmcpval","comm.tick")
+                do_tick()
+            end
+        end
+    end
+				
+
+	function OnPluginEnable()
+	   window(true)
+	end
+
+	function OnPluginDisable()
+	   WindowDelete(winid)
+	end
+
+	function OnPluginClose()
+	   WindowDelete(winid)
+	end
+
+	function OnPluginConnect()
+	   DebugNote("OnPluginConnect")
+	end
+
+	function OnPluginSaveState()
+	   SaveState()
+	end
+
+	function OnPluginWorldSave()
+	   SaveState()
+	end
+
+	function OnPluginDisable()
+	   SaveState()
+	end
+
+	function OnPluginDisconnect()
+	   SaveState()
+	end
+
+	function OnPluginListChanged()
+	   SaveState()
+	end
+
+	window(true)
+    ]]>
+</script>
+
+</muclient>
