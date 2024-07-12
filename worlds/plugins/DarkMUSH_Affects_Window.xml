@@ -12,7 +12,7 @@ language="Lua"
 purpose="Showing affects in a window"
 date_written="2019-07-03 12:04:56"
 requires="5.00"
-version="2.0"
+version="2.3"
 >
 
 </plugin>
@@ -83,6 +83,58 @@ version="2.0"
       script="RemoveAffect"
       >
   </trigger>  
+  <trigger
+  enabled="y"
+  match="^Welcome to Dark Wizardry\.  May your visit here be \.\.\. adventurous\.$|^Reconnecting\.$"
+  regexp="y"
+  send_to="12"
+  sequence="100"
+  omit_from_output="n"
+  >
+  <send>
+  SendNoEcho("aff")
+  EnableTrigger("AffListStart", true)
+  EnableTrigger("AffListEnd", true)
+  </send>
+</trigger>
+<trigger
+    name="AffListStart"
+    enabled="n"
+    match="You are affected by:"
+    regexp="n"
+    omit_from_output="y"
+    sequence="100"
+    send_to="12"
+    script="HandleAffListStart"
+>
+</trigger>
+
+<trigger
+    name="AffListEnd"
+    enabled="n"
+    match="^$"
+    regexp="y"
+    omit_from_output="n"
+    sequence="100"
+    send_to="12"
+>
+    <send>
+        EnableTrigger("AffListCapture", false)
+		EnableTrigger("AffListStart", false)
+		EnableTrigger("AffListEnd", false)
+    </send>
+</trigger>
+
+<trigger
+    name="AffListCapture"
+    enabled="n"
+    match="(Item:  .+ modifies .+ permanently\.|Spell: '.+'( modifies .+| .+|) for \d+ hours\.)"
+    regexp="y"
+    omit_from_output="y"
+    sequence="100"
+    script="CaptureAffList"
+>
+</trigger>
 </triggers>
 
 <!--  Script  -->
@@ -102,7 +154,7 @@ version="2.0"
 
 	-- Miniwindow State
 	local winid = "win_"..GetPluginID()
-	local version = "2.00"
+	local version = "2.3"
 	local hiddenWindow = winid.."text_background_offscreen"
 	local bg_color = "#000000"
 	local last_refresh = 1 -- last window refresh
@@ -138,8 +190,7 @@ version="2.0"
 
 	affect_icons = {
 	   ["68"] = "invis",
-	   ["94"] = "nayrus_love",
-	   --["180"] = "nayrus_love",
+	   ["94"] = "sanctuary",
 	   ["10"] = "blind",
 	   ["35"] = "curse",
 	   ["103"] = "sleep",
@@ -147,14 +198,48 @@ version="2.0"
 	   --["180"] = "haste",
 	   ["374"] = "surge",
 	   ["hungry"] = "hungry",
-	   ["thirsty"] = "thirsty"}
+	   ["thirsty"] = "thirsty",
+-------------BITVECTORS BELOW-----------------
+	   ["2"] = "invisible",
+	   ["128"] = "sanctuary",
+	   ["1024"] = "curse",
+	   ["131072"] = "sleep",
+	   ["2048"] = "haste",
+	   ["1"] = "blind",
+	   ["1073741824"] = "magic_only",
+	   ["33554432"] = "protect_good",
+	   ["16"] = "detect_magic",
+	   ["32"] = "detect_hidden",
+	   ["4"] = "detect_evil",
+	   ["8"] = "detect_invis",
+	   ["256"] = "faerie_fire",
+	   ["512"] = "infrared",
+	   ["16384"] = "slow",
+	   ["32768"] = "sneak",
+	   ["65536"] = "hide",
+	   ["262144"] = "charm",
+	   ["524288"] = "flying",
+	   ["1048576"] = "pass_door",
+	   ["2097152"] = "waterwalk",
+	   ["4194304"] = "nocharm",
+	   ["8388608"] = "noarrow",
+	   ["16777216"] = "nogate",
+	   ["67108864"] = "cover",
+	   ["134217728"] = "nosummon",
+	   ["268435456"] = "waterbreath",
+	   ["536870912"] = "alert"
+	}
 
     -- We are using this as a set, these affects should be removed from the window
     -- and not draw a disabled state
     bad_affects = {
        ["10"] = "blind",
 	   ["35"] = "curse",
-	   ["103"] = "sleep"
+	   ["103"] = "sleep",
+-------------BITVECTORS BELOW-----------------
+       ["1"] = "blind",
+       ["1024"] = "curse",
+       ["131072"] = "sleep"
     }
 
 
@@ -164,8 +249,8 @@ version="2.0"
 		  tooltip="Sanctuary",
 		  text="Sanctuary",
 		  send="c sanc",
-		  filename="worlds\\plugins\\images\\affects\\nayrus_love_%03i.png",
-		  disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		  filename="worlds\\plugins\\images\\affects\\sanctuary_%03i.png",
+		  disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 		}, 
 		{ 
 		name="Haste",
@@ -201,8 +286,8 @@ version="2.0"
 		tooltip="Sanctuary",
 		text="Sanctuary",
 		send="c sanc",
-		filename="worlds\\plugins\\images\\affects\\nayrus_love_%03i.png",
-		disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+		filename="worlds\\plugins\\images\\affects\\sanctuary_%03i.png",
+		disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 	  },   -- end of Button 1
 	   
 		-- Button 2
@@ -211,7 +296,7 @@ version="2.0"
 	    text="Sanctuary",
 	    send="c sanc",
 	    filename="empty",
-	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	    disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 		}, -- end of Button 2
 	   
 		-- Button 3
@@ -220,7 +305,7 @@ version="2.0"
 	    text="Sanctuary",
 	    send="c sanc",
 	    filename="empty",
-	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	    disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 		}, -- end of Button 3
 	   
 		-- Button 4
@@ -229,7 +314,7 @@ version="2.0"
 	    text="Sanctuary",
 	    send="c sanc",
 	    filename="empty",
-	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	    disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 		}, -- end of Button 4
 	   
 		-- Button 5
@@ -238,7 +323,7 @@ version="2.0"
 	    text="Sanctuary",
 	    send="c sanc",
 	    filename="empty",
-	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	    disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 		}, -- end of Button 5
 	   
 		-- Button 6
@@ -247,7 +332,7 @@ version="2.0"
 	    text="Sanctuary",
 	    send="c sanc",
 	    filename="empty",
-	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	    disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 		}, -- end of Button 6
 	   
 		-- Button 7
@@ -256,7 +341,7 @@ version="2.0"
 	    text="Sanctuary",
 	    send="c sanc",
 	    filename="empty",
-	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	    disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 		}, -- end of Button 7
 	   
 		-- Button 8
@@ -265,7 +350,7 @@ version="2.0"
 	    text="Sanctuary",
 	    send="c sanc",
 	    filename="empty",
-	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	    disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 		}, -- end of Button 8
 	   
 		-- Button 9
@@ -274,7 +359,7 @@ version="2.0"
 	    text="Sanctuary",
 	    send="c sanc",
 	    filename="empty",
-	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	    disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 		}, -- end of Button 9
 
 	   		-- Button 10
@@ -283,7 +368,7 @@ version="2.0"
 	    text="Sanctuary",
 	    send="c sanc",
 	    filename="empty",
-	    disabled_filename="worlds\\plugins\\images\\affects\\nayrus_love_down.png",
+	    disabled_filename="worlds\\plugins\\images\\affects\\sanctuary_down.png",
 	  }, -- end of Button 10
 	 
 	   --> add more priorities here
@@ -339,6 +424,19 @@ end
 	  SaveState()
 	end
 
+	affList = {}
+
+function HandleAffListStart(name, line)
+    affList = {}
+    EnableTrigger("AffListCapture", true)
+	print("enabling capture")
+end
+
+function CaptureAffList(name, line, wildcards)
+    table.insert(affList, line)
+end
+
+
 
 	-- --------------------------------------------------------------------
 	-- AddAffect (name, line, wildcards)
@@ -346,23 +444,18 @@ end
 	-- --------------------------------------------------------------------
 	function AddAffectTimed(spell, duration)
 	   DebugNote("AddAffectTimed")
-    --   print("Spell: " .. spell)
-    --   print("Duration: " .. duration)
        if(spell ~= nil and duration ~= nil) then
            DebugNote("Spell: " .. spell)
            DebugNote("Duration: " .. duration)
 		   spell = string.gsub(spell, " ", "_")
            local k, v = FindAffectInInfos(spell)
-           if (k == -1 and duration > 0 and affect_icons[spell] ~= nil) then
+           if (k == -1 and duration and affect_icons[spell] ~= nil) then
                DebugNote("Adding New Timed Affect")
                PlaceNewGIF(path_prefix .. affect_icons[spell], nil, duration, true)
-           --    DebugNote(string.format("%02d:%02d:%02d", hours, minutes, seconds))
-           --    DebugNote("timer retval: " .. AddTimer(spell, hours, minutes, seconds, "", timer_flag.Enabled + timer_flag.OneShot, "RemoveAffectTimed"))
-           --    DebugNote("timer: " .. GetTimer(spell))
                DebugNote(infos.x)
                --  local i, v = FindAffectInInfos(spell)
                --  tprint(FindAffectInInfos(spell)[1])
-            elseif (duration > 0 and affect_icons[spell] ~= nil) then
+            elseif (duration and affect_icons[spell] ~= nil) then
               v.enabled = true
               v.ticks_left = duration
 	        end -- if
@@ -646,12 +739,16 @@ end
 				-- Only display the timer if the spell is enabled
 				local spell_timer = infos[i].ticks_left or 0
  
-				if spell_timer >= 30 then
-				timer_color = ColourNameToRGB("lime")
+				local timer_color
+				if spell_timer == -1 then
+					spell_timer = "PERMA"
+					timer_color = ColourNameToRGB("fuchsia")
+				elseif spell_timer >= 30 then
+					timer_color = ColourNameToRGB("lime")
 				elseif spell_timer <= 29 and spell_timer >= 10 then
-				timer_color = ColourNameToRGB("yellow")
+					timer_color = ColourNameToRGB("yellow")
 				elseif spell_timer <= 9 then
-				timer_color = ColourNameToRGB("red")
+					timer_color = ColourNameToRGB("red")
 				end
 		 --	    for k, v in pairs (infos) do
 				WindowRectOp (winid, 2, infos[i].x, infos[i].y + image_size + text_margin_top, infos[i].x+image_size, infos[i].y + image_size + text_margin_top + text_height, ColourNameToRGB("bg_color"))
@@ -766,9 +863,9 @@ end
 
      function do_tick()
         for k, v in ipairs(infos) do
-            if v.enabled then
+            if v.enabled and v.ticks_left > -1 then
                 v.ticks_left = v.ticks_left - 1
-                if v.ticks_left <= 0 then
+                if v.ticks_left == 0 then
                     RemoveAffect(v.filename)
                 end
             end
@@ -814,7 +911,7 @@ end
 		WindowShow(winid, true)
 		show_window()
 		end
-
+		
 		function show_window()
 			WindowRectOp(winid, 2, 2, 1, -2, -2, ColourNameToRGB(bg_color)) -- blank canvas
 	 
@@ -1031,7 +1128,7 @@ end
                 assert (loadstring (luastmt or "")) ()
                 spell = tonumber(gmcpval("spell"))
                 duration = tonumber(gmcpval("duration"))
-                print("affon : " ..spell.. " : " ..duration)
+            --    print("affon : " ..spell.. " : " ..duration)
                 AddAffectTimed(spell, duration)
             --	cast_queue()
             end
