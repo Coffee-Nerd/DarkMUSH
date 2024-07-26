@@ -8,7 +8,7 @@
    <!ENTITY show_timing "false" >
    <!ENTITY show_completed "true" >
    <!ENTITY show_database_mods "false" >
-   <!ENTITY show_other_areas "false" >
+   <!ENTITY show_other_areas "FALSE" >
    <!ENTITY speedwalk_prefix "#" >
 ]>
 
@@ -21,7 +21,7 @@
    purpose="GMCP map builder for DarkMUSH"
    date_written="2010-09-01 16:37:14"
    requires="4.73"
-   version="2.04"
+   version="2.10"
    save_state="y"
    >
 
@@ -4503,154 +4503,74 @@ local bit = require("bit")
 -- original findpath function idea contributed by Spartacus
 function findpath(src, dst, noportals, norecalls)
    if not rooms[src] then
-      rooms[src] = load_room_from_database(src)
+       rooms[src] = load_room_from_database(src)
    end
    if not rooms[src] then
-      return
+       return
    end
 
+   -- Check for direct path
    local walk_one = nil
-   for dir,touid in pairs(rooms[src].exits) do
-      if tostring(touid) == tostring(dst) and tonumber(rooms[src].exit_locks[dir]) <= mylevel and ((walk_one == nil) or (#dir > #walk_one)) then
-         walk_one = dir -- if one room away, walk there (don't portal), but prefer a cexit
-      end
+   for dir, touid in pairs(rooms[src].exits) do
+       if tostring(touid) == tostring(dst) and tonumber(rooms[src].exit_locks[dir]) <= mylevel and ((walk_one == nil) or (#dir > #walk_one)) then
+           walk_one = dir
+       end
    end
    if walk_one ~= nil then
-      local path = {{dir=walk_one, uid=touid}}
-      BroadcastPlugin(502, "found_paths = "..string.gsub(serialize.save_simple(path),"%s+"," "))
-      return path, 1
+       local path = {{dir=walk_one, uid=touid}}
+       BroadcastPlugin(502, "found_paths = "..string.gsub(serialize.save_simple(path),"%s+"," "))
+       return path, 1
    end
-   local depth = 0
+
+   -- Initialize variables
    local max_depth = mapper.config.SCAN.depth
-   local room_sets = {}
-   local rooms_list = {}
-   local found = false
-   local ftd = {}
-   local f = ""
-   local next_room = 0
-
-   if type(src) ~= "number" then
-      src = string.match(src, "^(nomap_.+)$") or tonumber(src)
-   end
-   if type(dst) ~= "number" then
-      dst = string.match(dst, "^(nomap_.+)$") or tonumber(dst)
-   end
-
-   if src == dst or src == nil or dst == nil then
-      return {}
-   end
-
-   src = tostring(src)
-   dst = tostring(dst)
-
-   table.insert(rooms_list, fixsql(dst))
-
-   local visited = ""
+   local visited = {[tostring(src)] = true}
+   if noportals then visited["*"] = true end
+   if norecalls then visited["**"] = true end
+   local queue = {{uid = src, path = {}, depth = 0}}
    local main_status = GetInfo(53):gsub(" %(mapper searching depth %d+%)", "")
-   while not found and depth < max_depth do
-      SetStatus(main_status.." (mapper searching depth "..depth..")")
-      CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
-      depth = depth + 1
-      if depth > 1 then
-         ftd = room_sets[depth-1] or {}
-         rooms_list = {}
-         for k,v in pairs(ftd) do
-            table.insert(rooms_list, fixsql(v.fromuid))
-         end -- for from, to, dir
-      end -- if depth
 
-      -- prune the search space
-      if visited ~= "" then
-         visited = visited..","..table.concat(rooms_list, ",")
-      else
-         if noportals then
-            visited = visited..fixsql("*")..","
-         end
-         if norecalls then
-            visited = visited..fixsql("**")..","
-         end
-         visited = visited..table.concat(rooms_list, ",")
-      end
+   -- Fetch all relevant connections at once
+   local connections = {}
+   local q = string.format("SELECT fromuid, touid, dir FROM exits WHERE level <= %d OR (fromuid IN ('*','**') AND level <= %d)", mylevel, mylevel+(mytier*10))
+   for row in dbnrowsWRAPPER(q) do
+       if not connections[row.fromuid] then connections[row.fromuid] = {} end
+       table.insert(connections[row.fromuid], {touid = row.touid, dir = row.dir})
+   end
 
-      -- get all exits to any room in the previous set
-      local q = string.format ("select fromuid, touid, dir from exits where touid in (%s) and fromuid not in (%s) and ((fromuid not in ('*','**') and level <= %s) or (fromuid in ('*','**') and level <= %s)) order by length(dir) asc",table.concat(rooms_list,","), visited,mylevel,mylevel+(mytier*10))
-      local dcount = 0
-      room_sets[depth] = {}
-      for row in dbnrowsWRAPPER(q) do
-         dcount = dcount + 1
-         -- ordering by length(dir) ensures that custom exits (always longer than 1 char) get
-         -- used preferentially to normal ones (1 char)
-         room_sets[depth][row.fromuid] = {fromuid=row.fromuid, touid=row.touid, dir=row.dir}
-         if row.fromuid == "*" or (row.fromuid == "**" and f ~= "*" and f ~= src) or row.fromuid == src then
-            f = row.fromuid
-            found = true
-            found_depth = depth
-         end -- if src
-      end -- for select
+   -- BFS
+   while #queue > 0 do
+       local current = table.remove(queue, 1)
+       
+       if current.depth % 10 == 0 then  -- Update status less frequently
+           SetStatus(main_status.." (mapper searching depth "..current.depth..")")
+           CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
+       end
 
-      if dcount == 0 then
-         found = false
-         break -- there is no path from here to there
-      end -- if dcount
-   end -- while
+       if current.uid == dst then
+           SetStatus(main_status)
+           BroadcastPlugin(502, "found_paths = "..string.gsub(serialize.save_simple(current.path),"%s+"," "))
+           return current.path, current.depth
+       end
+
+       if current.depth < max_depth and connections[current.uid] then
+           for _, connection in ipairs(connections[current.uid]) do
+               if not visited[connection.touid] then
+                   visited[connection.touid] = true
+                   local new_path = {}
+                   for i = 1, #current.path do
+                       new_path[i] = current.path[i]
+                   end
+                   table.insert(new_path, {dir = connection.dir, uid = connection.touid})
+                   table.insert(queue, {uid = connection.touid, path = new_path, depth = current.depth + 1})
+               end
+           end
+       end
+   end
 
    SetStatus(main_status)
-
-   if found == false then
-      return
-   end
-
-   -- We've gotten back to the starting room from our destination. Now reconstruct the path.
-   local path = {}
-   -- set ftd to the first from,to,dir set where from was either our start room or * or **
-   ftd = room_sets[found_depth][f]
-
-   if (f == "*" and rooms[src].noportal == 1) or (f == "**" and rooms[src].norecall == 1) then
-      if rooms[src].norecall ~= 1 and bounce_recall ~= nil then
-         table.insert(path, bounce_recall)
-         if dst == bounce_recall.uid then
-            return path, found_depth
-         end
-      elseif rooms[src].noportal ~= 1 and bounce_portal ~= nil then
-         table.insert(path, bounce_portal)
-         if dst == bounce_portal.uid then
-            return path, found_depth
-         end
-      else
-         local jump_room, path_type = findNearestJumpRoom(src, dst, f)
-         if not jump_room then
-            return
-         end
-         local path, first_depth = findpath(src,jump_room, true, true) -- this could be optimized away by building the path in findNearestJumpRoom, but the gain would be negligible
-         if bit.band(path_type, 1) ~= 0 then
-            -- path_type 1 means just walk to the destination
-            return path, first_depth
-         else
-            local second_path, second_depth = findpath(jump_room, dst)
-            for i,v in ipairs(second_path) do
-               table.insert(path, v) -- bug on this line if path is nil?
-            end
-            return path, first_depth+second_depth
-         end
-      end
-   end
-
-   table.insert(path, {dir=ftd.dir, uid=ftd.touid})
-
-   next_room = ftd.touid
-   while depth > 1 do
-      depth = depth - 1
-      ftd = room_sets[depth][next_room]
-      next_room = ftd.touid
--- this caching is probably not noticeably useful, so disable it for now
---      if not rooms[ftd.touid] then -- if not in memory yet, get it
---         rooms[ftd.touid] = load_room_from_database (ftd.touid)
---      end
-      table.insert(path, {dir=ftd.dir, uid=ftd.touid})
-   end -- while
-   BroadcastPlugin(502, "found_paths = "..string.gsub(serialize.save_simple(path),"%s+"," "))
-   return path, found_depth
-end -- function findpath
+   return nil  -- No path found
+end
 
 -- Very similar to findpath, but looks forwards instead of backwards (so only walks)
 -- and stops at the nearest portalable or recallable room

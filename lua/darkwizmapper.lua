@@ -59,7 +59,7 @@ Room info should include:
 
 module (..., package.seeall)
 
-VERSION = 2.5   -- for querying by plugins
+VERSION = 2.6   -- for querying by plugins
 require "aard_register_z_on_create"
 
 require "mw_theme_base"
@@ -79,8 +79,7 @@ local CONFIG_FONT_ID_UL = "cfnu"
 local ROOM_SIZE = tonumber(GetVariable("ROOM_SIZE")) or 12
 
 -- how far away to draw rooms from each other
-local DISTANCE_TO_NEXT_ROOM = tonumber(GetVariable("DISTANCE_TO_NEXT_ROOM")) or 8
-
+local DISTANCE_TO_NEXT_ROOM = tonumber(GetVariable("DISTANCE_TO_NEXT_ROOM")) or 8 --CURRENTLY SET TO 24
 -- supplied in init
 local supplied_get_room
 local room_click
@@ -714,90 +713,12 @@ local function draw_room (uid, path, x, y)
     -- DRAW MAP IMAGES 
 tile_mode = GetPluginVariable("b6eae87ccedd84f510b74714", "tile_mode") or "1" 
 area = GetPluginVariable("b6eae87ccedd84f510b74714", "current_area") or "<No_Area>" 
+tileName = room.terrain
                            --  if room.fillcolour and room.fillcolour ~= "" and tile_mode == "1" then
 						   if room.terrain and room.terrain ~= "" and tile_mode == "1" then
-		 									 
-		 
-   	                         if string.match (room.terrain, "ocean") then
-          WindowDrawImage (win, "ocean", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		                     elseif string.match (room.terrain, "aylorcity") then
-                                         special_room = true
-		 	                             WindowDrawImage (win, "waypoint", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-				                         WindowCircleOp (win, miniwin.circle_rectangle, left-2-room.borderpenwidth, top-2-room.borderpenwidth,
-                                         right+2+room.borderpenwidth, bottom+2+room.borderpenwidth,WAYPOINT_FILL_COLOUR.colour,
-                                         room.borderpen, room.borderpenwidth,-1,miniwin.brush_null)
-	                         elseif string.match (room.terrain, "city") then
-	      WindowDrawImage (win, "city", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill -- formerly town
-		  	                         elseif string.match (room.terrain, "hallway") then
-	      WindowDrawImage (win, "city", left, top, right, bottom, miniwin.image_stretch) 		  -- stretch to fill -- formerly town
-		  		  	          elseif string.match (room.terrain, "dungeon") then
-	      WindowDrawImage (win, "dungeon", left, top, right, bottom, miniwin.image_stretch) 		  -- stretch to fill -- formerly town
-		  		  		  	  elseif string.match (room.terrain, "crypt") then
-	      WindowDrawImage (win, "crypt", left, top, right, bottom, miniwin.image_stretch) 		  -- stretch to fill -- formerly town
-		  		  		  	  elseif string.match (room.terrain, "underground") then
-	      WindowDrawImage (win, "underground", left, top, right, bottom, miniwin.image_stretch) 		  -- stretch to fill -- formerly town
-		  	                 elseif string.match (room.terrain, "cave") then
-	      WindowDrawImage (win, "cave", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill		  
-		  	                 elseif string.match (room.fillcolour, "61680") then
-	      WindowDrawImage (win, "stream", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  	                 elseif string.match (room.terrain, "road_eastwest") then
-	      WindowDrawImage (win, "city", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  	         elseif string.match (room.terrain, "beach") then
-	      WindowDrawImage (win, "beach", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.terrain, "forest") then
-	      WindowDrawImage (win, "lightforest", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.fillcolour, "16384") then
-	      WindowDrawImage (win, "darkforest", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		     elseif string.match (room.terrain, "rocks") then
-	      WindowDrawImage (win, "rock", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.terrain, "field") then
-	      WindowDrawImage (win, "field", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.fillcolour, "6316128") and room.area == "Brigantes Castle" then
-	      WindowDrawImage (win, "inside_brigantes", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.terrain, "temple") and room.area ~= "Brigantes Castle" then
-	      WindowDrawImage (win, "building", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		     elseif string.match (room.terrain, "inside") then
-	      WindowDrawImage (win, "building", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		     elseif string.match (room.terrain, "castle") then
-	      WindowDrawImage (win, "building", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		     elseif string.match (room.terrain, "shop") then
-	      WindowDrawImage (win, "building", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  	                 elseif string.match (room.terrain, "hellfountain") then
-          WindowDrawImage (win, "hellfountain", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-	 		  	             elseif string.match (room.terrain, "desert") then
-          WindowDrawImage (win, "desert", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  	 		  	     elseif string.match (room.fillcolour, "8409216") then
-          WindowDrawImage (win, "tundra", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  	 		 elseif string.match (room.terrain, "snow") then
-          WindowDrawImage (win, "taiga", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  	 		 elseif string.match (room.terrain, "ice") then
-          WindowDrawImage (win, "ice", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-	 		  	             elseif string.match (room.fillcolour, "9234160") then
-          WindowDrawImage (win, "sandy", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  	 		  	     elseif string.match (room.fillcolour, "32768") then
-          WindowDrawImage (win, "thickforest", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.fillcolour, "4210752") then
-	      WindowDrawImage (win, "cave", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.terrain, "swamp") then
-	      WindowDrawImage (win, "swamp", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.terrain, "hills") then
-	      WindowDrawImage (win, "hill", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.fillcolour, "15790240") then
-	      WindowDrawImage (win, "wasteland", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill	
-		  		  		  	 elseif string.match (room.terrain, "mountain") then
-	      WindowDrawImage (win, "mountain", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.terrain, "smallroad") then
-	      WindowDrawImage (win, "road", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	elseif string.match (room.terrain, "road") then
-	      WindowDrawImage (win, "road", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
-		  		  		  	 elseif string.match (room.terrain, "ruins") then
-	      WindowDrawImage (win, "ruins", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill	
-		  		  		  	 elseif string.match (room.fillcolour, "138860") then
-	      WindowDrawImage (win, "developed", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill	
-		  		  		  	 elseif string.match (room.fillcolour, "255") then
-	      WindowDrawImage (win, "lava", left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill	
-		  
-	 end -- if
+   	                         if string.match (room.terrain, tileName) then
+          WindowDrawImage (win, tileName, left, top, right, bottom, miniwin.image_stretch)  -- stretch to fill
+                               end
      --                        if current_area == "The Grand City of Aylor" and room.info ~= nil then
      --                                   room.bordercolour = mapper.PK_BORDER_COLOUR.colour
      --                                    room.borderpenwidth = 3
@@ -1084,33 +1005,74 @@ function dress_window(room_name, room_uid, area_name)
    end
 end
 
-function draw (uid)
+local image_data = {}
+local loaded_images = {}
+
+local function preload_images()
+    local image_files = {
+        "inside", "town", "forest", "field", "lightforest", "thickforest", "darkforest",
+        "swamp", "sandy", "mountain", "rock", "desert", "tundra", "beach",
+        "hills", "ocean", "stream", "ice", "cave", "city", "wasteland", "water",
+        "taiga", "road", "ruins", "developed", "lava", "hellfountain", "bank",
+        "fountain", "quest", "waypoint", "warriortrainer", "thieftrainer",
+        "druidtrainer", "clerictrainer", "magetrainer", "necromancertrainer",
+        "rangertrainer", "shop", "priest", "alchemyguild", "gato", "moti",
+        "weaponshop", "armorshop", "petshop", "itemshop", "foodshop",
+        "lightshop", "inn", "tavern", "dungeon", "crypt", "underground", "underwater", "swim"
+    }
+
+    for _, image in ipairs(image_files) do
+        local f = assert(io.open("worlds/plugins/images/" .. image .. ".png", "rb"))
+        image_data[image] = f:read("*a")  -- read all of it
+        f:close()  -- close the file
+    end
+end
+
+local function load_image_if_needed(win, image_id)
+    if not loaded_images[image_id] then
+        WindowLoadImageMemory(win, image_id, image_data[image_id])
+        loaded_images[image_id] = true
+    end
+end
+
+local function draw_image(win, image_id, left, top, right, bottom, color)
+    load_image_if_needed(win, image_id)
+    WindowDrawImage(win, image_id, left, top, right, bottom, miniwin.image_stretch)
+    if color then
+        WindowCircleOp(win, miniwin.circle_rectangle, left - 2, top - 2, right + 2, bottom + 2, color, miniwin.pen_solid, 1, -1, miniwin.brush_null)
+    end
+end
+
+preload_images()
+
+
+function draw(uid)
    if not uid then
-      maperror "Cannot draw map right now, I don't know where you are - try: LOOK"
-      return
+       maperror "Cannot draw map right now, I don't know where you are - try: LOOK"
+       return
    end -- if
 
    if current_room and current_room ~= uid then
-      changed_room (uid)
+       changed_room(uid)
    end -- if
 
    current_room = uid -- remember where we are
 
    if dont_draw then
-      return
+       return
    end
 
    -- timing
-   local start_time = utils.timer ()
+   local start_time = utils.timer()
 
    -- start with initial room
-   rooms = { [uid] = get_room (uid) }
+   rooms = { [uid] = get_room(uid) }
 
    -- lookup current room
-   local room = rooms [uid]
+   local room = rooms[uid]
 
    room = room or { name = "<Unknown room>", area = "<Unknown area>" }
-   last_visited [uid] = os.time ()
+   last_visited[uid] = os.time()
 
    current_area = room.area
 
@@ -1120,175 +1082,115 @@ function draw (uid)
    config.WINDOW.width = WindowInfo(win, 3) or config.WINDOW.width
    config.WINDOW.height = WindowInfo(win, 4) or config.WINDOW.height
 
-   WindowCreate (win,
-      windowinfo.window_left,
-      windowinfo.window_top,
-      config.WINDOW.width,
-      config.WINDOW.height,
-      windowinfo.window_mode,   -- top right
-      windowinfo.window_flags,
-      Theme.PRIMARY_BODY)
+   WindowCreate(win,
+       windowinfo.window_left,
+       windowinfo.window_top,
+       config.WINDOW.width,
+       config.WINDOW.height,
+       windowinfo.window_mode,   -- top right
+       windowinfo.window_flags,
+       Theme.PRIMARY_BODY)
 
-		  --Handle loading imagetiles
-	  
-        WindowLoadImage (win, "building", "worlds\\plugins\\images\\building.bmp")                       --Terrain 01 BUILDING
-		  WindowLoadImage (win, "town", "worlds\\plugins\\images\\town.bmp")                               --Terrain 02 TOWN
-		  WindowLoadImage (win, "field", "worlds\\plugins\\images\\field.bmp")                             --Terrain 03 FIELD
-		  WindowLoadImage (win, "lightforest", "worlds\\plugins\\images\\lightforest.bmp")                 --Terrain 04 LIGHTFOREST
-		  WindowLoadImage (win, "thickforest", "worlds\\plugins\\images\\thickforest.bmp")                 --Terrain 05 THICKFOREST
-		  WindowLoadImage (win, "darkforest", "worlds\\plugins\\images\\darkforest.bmp")                   --Terrain 06 DARKFOREST
-	     WindowLoadImage (win, "swamp", "worlds\\plugins\\images\\swamp.bmp")		                       --Terrain 07 SWAMP
-		  
-		  WindowLoadImage (win, "sandy", "worlds\\plugins\\images\\sandy.bmp")                             --Terrain 09 SANDY
-		  WindowLoadImage (win, "mountain", "worlds\\plugins\\images\\mountain.bmp")                       --Terrain 10	MOUNTAIN
-        WindowLoadImage (win, "rock", "worlds\\plugins\\images\\rock.bmp")                               --Terrain 11 ROCK		  
-		  WindowLoadImage (win, "desert", "worlds\\plugins\\images\\desert.bmp")                           --Terrain 12 DESERT
-		  WindowLoadImage (win, "tundra", "worlds\\plugins\\images\\tundra.bmp")                           --Terrain 13 TUNDRA
-		  
-		  
-		  WindowLoadImage (win, "beach", "worlds\\plugins\\images\\beach.bmp")                             --Terrain 14 BEACH		  
-		  WindowLoadImage (win, "hill", "worlds\\plugins\\images\\hill.bmp") 		                       --Terrain 15 HILL
-		  
-		  
-	     WindowLoadImage (win, "ocean", "worlds\\plugins\\images\\ocean.bmp")                             --Terrain 18 OCEAN
-	     WindowLoadImage (win, "stream", "worlds\\plugins\\images\\stream.bmp")		                   --Terrain 19	STREAM 
-		  WindowLoadImage (win, "ice", "worlds\\plugins\\images\\ice.bmp")                             --Terrain 24 ICE
-		  
-		  WindowLoadImage (win, "cave", "worlds\\plugins\\images\\cave.bmp")                               --Terrain 27	CAVE
-		  WindowLoadImage (win, "city", "worlds\\plugins\\images\\city.bmp")                               --Terrain 28 CITY
-		  
-		  WindowLoadImage (win, "wasteland", "worlds\\plugins\\images\\wasteland.bmp")		               --Terrain 30 WASTELAND
-		  
-		  WindowLoadImage (win, "water", "worlds\\plugins\\images\\water.bmp")		                       --Terrain 32 WATER
-		  
-		  WindowLoadImage (win, "taiga", "worlds\\plugins\\images\\taiga.bmp")                             --Terrain 34 TAIGA
-		  WindowLoadImage (win, "road", "worlds\\plugins\\images\\road.bmp")                               --Terrain Road
-		  WindowLoadImage (win, "ruins", "worlds\\plugins\\images\\ruins.bmp")                             --Terrain Ruins
-		  WindowLoadImage (win, "developed", "worlds\\plugins\\images\\developed.bmp")                     --Terrain Developed	
-		  WindowLoadImage (win, "lava", "worlds\\plugins\\images\\lava.bmp")                               --Terrain Lava		  
-		  WindowLoadImage (win, "hellfountain", "worlds\\plugins\\images\\hellfountain.bmp")               --Terrain HellFountain		 
-		  WindowLoadImage (win, "cave", "worlds\\plugins\\images\\cave.png")               --Terrain HellFountain				  
-		  
-		  
-		  
-		  
-		  
-		  
-		  
-	     WindowLoadImage (win, "bank", "worlds\\plugins\\images\\bank.bmp")                               --Bank Tile
-		  WindowLoadImage (win, "fountain", "worlds\\plugins\\images\\fountain.png")                       --Fountain Tile
-		  WindowLoadImage (win, "quest", "worlds\\plugins\\images\\quest.png")                             --Quest Tile
-		  WindowLoadImage (win, "waypoint", "worlds\\plugins\\images\\waypoint.bmp")                       --Waypoint Tile
-		  WindowLoadImage (win, "warriortrainer", "worlds\\plugins\\images\\warriortrainer.bmp")           --Warrior Trainer Tile
-		  WindowLoadImage (win, "thieftrainer", "worlds\\plugins\\images\\thieftrainer.bmp")               --Thief Trainer Tile
-		  WindowLoadImage (win, "druidtrainer", "worlds\\plugins\\images\\druidtrainer.bmp")               --Druid Trainer Tile
-		  WindowLoadImage (win, "clerictrainer", "worlds\\plugins\\images\\clerictrainer.bmp")             --Cleric Trainer Tile
-		  WindowLoadImage (win, "magetrainer", "worlds\\plugins\\images\\magetrainer.bmp")                 --Mage Trainer Tile
-		  WindowLoadImage (win, "necromancertrainer", "worlds\\plugins\\images\\necromancertrainer.bmp")   --Necromancer Trainer Tile
-		  WindowLoadImage (win, "rangertrainer", "worlds\\plugins\\images\\rangertrainer.bmp")             --Ranger Trainer Tile
-		  WindowLoadImage (win, "shop", "worlds\\plugins\\images\\shop.bmp")                               --Shop Tile
-		  WindowLoadImage (win, "priest", "worlds\\plugins\\images\\priest.bmp")		                   --Priest Tile
-		  WindowLoadImage (win, "alchemyguild", "worlds\\plugins\\images\\alchemyguild.bmp")               --Alchemy Guild Tile		
-	     WindowLoadImage (win, "gato", "worlds\\plugins\\images\\gato.png")                               --Gato Tile	
-	     WindowLoadImage (win, "moti", "worlds\\plugins\\images\\moti.png")                               --Moti Tile		
-	     WindowLoadImage (win, "weaponshop", "worlds\\plugins\\images\\weaponshop.png")                   --Weapon Shop Tile				  
-	     WindowLoadImage (win, "armorshop", "worlds\\plugins\\images\\armorshop.png")                     --Armor Shop Tile	
-	     WindowLoadImage (win, "petshop", "worlds\\plugins\\images\\petshop.png")                         --Pet Shop Tile			  
-	     WindowLoadImage (win, "itemshop", "worlds\\plugins\\images\\itemshop.png")                       --Item Shop Tile		
-	     WindowLoadImage (win, "foodshop", "worlds\\plugins\\images\\foodshop.png")                       --Food Shop Tile	
-	     WindowLoadImage (win, "lightshop", "worlds\\plugins\\images\\lightshop.png")                     --Light Shop Tile			  
-	     WindowLoadImage (win, "inn", "worlds\\plugins\\images\\inn.png")                                 --Inn Shop Tile	
-	     WindowLoadImage (win, "tavern", "worlds\\plugins\\images\\tavern.png")                           --Tavern Tile	
-	     WindowLoadImage (win, "dungeon", "worlds\\plugins\\images\\inside_brigantes.png")                --Dungeon Tile
-		  WindowLoadImage (win, "crypt", "worlds\\plugins\\images\\crypt.png")                             --Crypt Tile
-		  WindowLoadImage (win, "underground", "worlds\\plugins\\images\\underground.png")                 --Underground Tile
+   -- Handle loading imagetiles and draw them if they are not already loaded
+   local terrains = {
+       "inside", "town", "forest", "field", "lightforest", "thickforest", "darkforest",
+       "swamp", "sandy", "mountain", "rock", "desert", "tundra", "beach",
+       "hills", "ocean", "stream", "ice", "cave", "city", "wasteland", "water",
+       "taiga", "road", "ruins", "developed", "lava", "hellfountain", "bank",
+       "fountain", "quest", "waypoint", "warriortrainer", "thieftrainer",
+       "druidtrainer", "clerictrainer", "magetrainer", "necromancertrainer",
+       "rangertrainer", "shop", "priest", "alchemyguild", "gato", "moti",
+       "weaponshop", "armorshop", "petshop", "itemshop", "foodshop",
+       "lightshop", "inn", "tavern", "dungeon", "crypt", "underground", "underwater", "swim"
+   }
 
-
-
+   for _, terrain in ipairs(terrains) do
+       load_image_if_needed(win, terrain)
+   end
 
    -- Handle background texture.
    if room.textimage ~= nil and config.USE_TEXTURES.enabled == true then
-      local iwidth = WindowImageInfo(win,room.textimage,2)
-      local iheight= WindowImageInfo(win,room.textimage,3)
-      local x = 0
-      local y = 0
+       local iwidth = WindowImageInfo(win, room.textimage, 2)
+       local iheight = WindowImageInfo(win, room.textimage, 3)
+       local x = 0
+       local y = 0
 
-      while y < config.WINDOW.height do
-         x = 0
-         while x < config.WINDOW.width do
-            WindowDrawImage (win, room.textimage, x, y, 0, 0, 1)  -- straight copy
-            x = x + iwidth
-         end
-         y = y + iheight
-      end
+       while y < config.WINDOW.height do
+           x = 0
+           while x < config.WINDOW.width do
+               WindowDrawImage(win, room.textimage, x, y, 0, 0, 1)  -- straight copy
+               x = x + iwidth
+           end
+           y = y + iheight
+       end
    end
 
    -- for zooming
    WindowAddHotspot(win,
-      "zzz_zoom",
-      0, 0, 0, 0,
-      "", "", "", "", "mapper.MouseUp",
-      "",  -- hint
-      miniwin.cursor_arrow, 0)
+       "zzz_zoom",
+       0, 0, 0, 0,
+       "", "", "", "", "mapper.MouseUp",
+       "",  -- hint
+       miniwin.cursor_arrow, 0)
 
-   WindowScrollwheelHandler (win, "zzz_zoom", "mapper.zoom_map")
+   WindowScrollwheelHandler(win, "zzz_zoom", "mapper.zoom_map")
 
    -- set up for initial room, in middle
    drawn, drawn_coords, rooms_to_be_drawn, plan_to_draw, area_exits = {}, {}, {}, {}, {}, {}
    depth = 0
 
    -- insert initial room
-   table.insert (rooms_to_be_drawn, add_another_room (uid, {}, config.WINDOW.width / 2, config.WINDOW.height / 2))
+   table.insert(rooms_to_be_drawn, add_another_room(uid, {}, config.WINDOW.width / 2, config.WINDOW.height / 2))
 
    while #rooms_to_be_drawn > 0 and depth < config.SCAN.depth do
-      local old_generation = rooms_to_be_drawn
-      rooms_to_be_drawn = {}  -- new generation
-      for i, part in ipairs (old_generation) do
-         draw_room (part.uid, part.path, part.x, part.y)
-      end -- for each existing room
-      depth = depth + 1
+       local old_generation = rooms_to_be_drawn
+       rooms_to_be_drawn = {}  -- new generation
+       for i, part in ipairs(old_generation) do
+           draw_room(part.uid, part.path, part.x, part.y)
+       end -- for each existing room
+       depth = depth + 1
    end -- while all rooms_to_be_drawn
 
-   for area, zone_exit in pairs (area_exits) do
-      draw_zone_exit (zone_exit)
+   for area, zone_exit in pairs(area_exits) do
+       draw_zone_exit(zone_exit)
    end -- for
 
    truncated_room_name = room.name
-   local name_width = WindowTextWidth (win, FONT_ID, truncated_room_name)
+   local name_width = WindowTextWidth(win, FONT_ID, truncated_room_name)
    local add_dots = false
 
    -- truncate name if too long
-   local available_width = (config.WINDOW.width - 20 - WindowTextWidth (win, FONT_ID, "*?"))
+   local available_width = (config.WINDOW.width - 20 - WindowTextWidth(win, FONT_ID, "*?"))
    while name_width > available_width do
-      truncated_room_name = truncated_room_name:sub(1, -3)
-      name_width = WindowTextWidth (win, FONT_ID, truncated_room_name .. "...")
-      add_dots = true
-      if truncated_room_name == "" then
-         break
-      end
+       truncated_room_name = truncated_room_name:sub(1, -3)
+       name_width = WindowTextWidth(win, FONT_ID, truncated_room_name .. "...")
+       add_dots = true
+       if truncated_room_name == "" then
+           break
+       end
    end -- while
 
    if add_dots then
-      truncated_room_name = truncated_room_name .. "..."
+       truncated_room_name = truncated_room_name .. "..."
    end -- if
 
    is_pk = false
    if room.info then
-      for _,v in ipairs(utils.split(room.info, ",")) do
-         if v == "pk" then
-            is_pk = true
-            break
-         end
-      end
+       for _, v in ipairs(utils.split(room.info, ",")) do
+           if v == "pk" then
+               is_pk = true
+               break
+           end
+       end
    end
 
    title_color = ""
    next_blink_color = 0
    if not is_pk then
-      DeleteTimer("blink_title")
+       DeleteTimer("blink_title")
    else
-      blink_title()
-      AddTimer("blink_title", 0, 0, 0.5, "", timer_flag.Enabled + timer_flag.Temporary + timer_flag.Replace, "mapper.blink_title")
+       blink_title()
+       AddTimer("blink_title", 0, 0, 0.5, "", timer_flag.Enabled + timer_flag.Temporary + timer_flag.Replace, "mapper.blink_title")
    end
 
    dress_window(truncated_room_name, uid, room.area)
@@ -1296,26 +1198,26 @@ function draw (uid)
    Theme.AddResizeTag(win, 1, nil, nil, "mapper.resize_mouse_down", "mapper.resize_move_callback", "mapper.resize_release_callback")
 
    -- make sure window visible
-   WindowShow (win, not window_hidden)
+   WindowShow(win, not window_hidden)
 
    last_drawn = uid  -- last room number we drew (for zooming)
 
-   local end_time = utils.timer ()
+   local end_time = utils.timer()
 
    -- timing stuff
    if timing then
-      local count= 0
-      for k in pairs (drawn) do
-         count = count + 1
-      end
-      print (string.format ("Time to draw %i rooms = %0.3f seconds, search depth = %i", count, end_time - start_time, depth))
+       local count = 0
+       for k in pairs(drawn) do
+           count = count + 1
+       end
+       print(string.format("Time to draw %i rooms = %0.3f seconds, search depth = %i", count, end_time - start_time, depth))
 
-      total_times_drawn = total_times_drawn + 1
-      total_time_taken = total_time_taken + end_time - start_time
+       total_times_drawn = total_times_drawn + 1
+       total_time_taken = total_time_taken + end_time - start_time
 
-      print (string.format ("Total times map drawn = %i, average time to draw = %0.3f seconds",
-         total_times_drawn,
-         total_time_taken / total_times_drawn))
+       print(string.format("Total times map drawn = %i, average time to draw = %0.3f seconds",
+           total_times_drawn,
+           total_time_taken / total_times_drawn))
    end -- if
 
    CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
@@ -1511,21 +1413,22 @@ function hyperlinkGoto(uid)
 end
 
 require "serialize"
-function full_find (dests, show_uid, expected_count, walk, fcb, no_portals)
+function full_find(dests, show_uid, expected_count, walk, fcb, no_portals)
+   local start_time = utils.timer()  -- Start the timer
    local paths = {}
    local notfound = {}
    for i,v in ipairs(dests) do
-      SetStatus (string.format ("Pathfinding: searching for route to %i/%i discovered destinations", i, #dests))
-      CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
-      local foundpath = findpath(current_room, v.uid, no_portals, no_portals)
-      if not rooms [v.uid] then
-         rooms [v.uid] = get_room (v.uid)
-      end
-      if foundpath ~= nil then
-         paths[v.uid] = {path=foundpath, reason=v.reason}
-      else
-         table.insert(notfound, {uid=v.uid, reason=v.reason})
-      end
+       SetStatus (string.format ("Pathfinding: searching for route to %i/%i discovered destinations", i, #dests))
+       CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
+       local foundpath = findpath(current_room, v.uid, no_portals, no_portals)
+       if not rooms [v.uid] then
+           rooms [v.uid] = get_room (v.uid)
+       end
+       if foundpath ~= nil then
+           paths[v.uid] = {path=foundpath, reason=v.reason}
+       else
+           table.insert(notfound, {uid=v.uid, reason=v.reason})
+       end
    end
    SetStatus ("")
 
@@ -1535,134 +1438,175 @@ function full_find (dests, show_uid, expected_count, walk, fcb, no_portals)
    local t = {}
    local found_count = 0
    for k in pairs (paths) do
-      table.insert (t, k)
-      found_count = found_count + 1
+       table.insert (t, k)
+       found_count = found_count + 1
    end -- for
 
    -- sort so closest ones are first
    table.sort (t, function (a, b) return #paths [a].path < #paths [b].path end )
 
    if walk and t[1] then
-      local uid = t[1]
-      local path = paths[uid].path
-      mapprint ("Going to:", rooms[uid].name)
-      start_speedwalk(path)
-      return
+       local uid = t[1]
+       local path = paths[uid].path
+       mapprint ("Going to:", rooms[uid].name)
+       start_speedwalk(path)
+       return
    end -- if walking wanted
 
-   Note("+------------------------------ START OF SEARCH -------------------------------+")
+   utilprint("$x238+------------------------------ $x208START OF SEARCH$x238 -------------------------------+")
    for _, uid in ipairs (t) do
-      local room = rooms [uid] -- ought to exist or wouldn't be in table
-      assert (room, "Room " .. uid .. " is not in rooms table.")
+       local room = rooms [uid] -- ought to exist or wouldn't be in table
+       assert (room, "Room " .. uid .. " is not in rooms table.")
 
-      local distance = #paths [uid].path .. " room"
-      if #paths [uid].path > 1 or #paths[uid].path == 0 then
-         distance = distance .. "s"
-      end -- if
-      distance = distance .. " away"
+       local distance = #paths [uid].path .. " room"
+       if #paths [uid].path > 1 or #paths[uid].path == 0 then
+           distance = distance .. "s"
+       end -- if
+       distance = distance .. " away"
 
-      local room_name = room.name
-      room_name = room_name .. " (" .. room.area .. ")"
+       local room_name = room.name
+       room_name = room_name .. " (" .. room.area .. ")"
 
-      if show_uid then
-         room_name = room_name .. " (" .. uid .. ")"
-      end -- if
+       if show_uid then
+           room_name = room_name .. " (" .. uid .. ")"
+       end -- if
 
-      if current_room ~= uid then
-         table.insert(last_result_list, uid)
-         Hyperlink ("!!" .. GetPluginID () .. ":mapper.hyperlinkGoto(" .. uid .. ")",
-            "["..#last_result_list.."] "..room_name, "Click to speedwalk there (" .. distance .. ")", "", "", false, NoUnderline_hyperlinks)
-      else
-         Tell(room_name)
-      end
-      local info = ""
-      if type (paths [uid].reason) == "string" and paths [uid].reason ~= "" then
-         info = " [" .. paths [uid].reason .. "]"
-      end -- if
-      mapprint (" - " .. distance .. info) -- new line
+       table.insert(last_result_list, uid)
+       local TextColor, BackgroundColor
+       if (#last_result_list % 2 == 0) then
+           TextColor = "grey"
+           BackgroundColor = "#1F170F"
+       else
+           TextColor = "grey"
+           BackgroundColor = "black"
+       end
 
-      -- callback to display extra stuff (like find context, room description)
-      if fcb then
-         fcb (uid)
-      end -- if callback
+       Hyperlink ("!!" .. GetPluginID () .. ":mapper.hyperlinkGoto(" .. uid .. ")",
+           "["..#last_result_list.."] "..room_name, "Click to speedwalk there (" .. distance .. ")", TextColor, BackgroundColor, false, NoUnderline_hyperlinks)
+       
+       local info = ""
+       if type (paths [uid].reason) == "string" and paths [uid].reason ~= "" then
+           info = " [" .. paths [uid].reason .. "]"
+       end -- if
+       mapprint (" - " .. distance .. info) -- new line
+
+       -- callback to display extra stuff (like find context, room description)
+       if fcb then
+           fcb (uid)
+       end -- if callback
    end -- for each room
 
    if expected_count and found_count < expected_count then
-      local diff = expected_count - found_count
-      local were, matches = "were", "matches"
-      if diff == 1 then
-         were, matches = "was", "match"
-      end -- if
-      Note("+------------------------------------------------------------------------------+")
-      mapprint ("There", were, diff, matches,
-         "which I could not find a path to within",
-         config.SCAN.depth, "rooms:")
+       local diff = expected_count - found_count
+       local were, matches = "were", "matches"
+       if diff == 1 then
+           were, matches = "was", "match"
+       end -- if
+       utilprint("$x238+------------------------------------------------------------------------------+")
+       mapprint ("There", were, diff, matches,
+           "which I could not find a path to within",
+           config.SCAN.depth, "rooms:")
    end -- if
    for i,v in ipairs(notfound) do
-      local nfroom = rooms[v.uid]
-      local nfline = nfroom.name
-      nfline = nfline .. " (" .. nfroom.area .. ")"
+       local nfroom = rooms[v.uid]
+       local nfline = nfroom.name
+       nfline = nfline .. " (" .. nfroom.area .. ")"
 
-      if show_uid then
-         nfline = nfline .. " (" .. v.uid .. ")"
-      end -- if
-      Tell(nfline)
-      if type (v.reason) == "string" and v.reason ~= "" then
-         nfinfo = " - [" .. v.reason .. "]"
-         mapprint (nfinfo) -- new line
-      else
-         Note("")
-      end -- if
+       if show_uid then
+           nfline = nfline .. " (" .. v.uid .. ")"
+       end -- if
+       Tell(nfline)
+       if type (v.reason) == "string" and v.reason ~= "" then
+           nfinfo = " - [" .. v.reason .. "]"
+           mapprint (nfinfo) -- new line
+       else
+           Note("")
+       end -- if
    end
 
-   Note("+-------------------------------- END OF SEARCH -------------------------------+")
+   utilprint("$x238+-------------------------------- $x208END OF SEARCH$x238 -------------------------------+")
+   local end_time = utils.timer()  -- End the timer
+   print(string.format("Full search took %.3f seconds.", end_time - start_time))
 end
 
 function quick_find(dests, show_uid, expected_count, walk, fcb)
+   local start_time = utils.timer()  -- Start the timer
    CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
-   Note("+------------------------------ START OF SEARCH -------------------------------+")
+   utilprint("$x238+------------------------------ $x208START OF SEARCH$x238 -------------------------------+")
+
+   local paths = {}
+   for i,v in ipairs(dests) do
+       local uid = v.uid
+       if not rooms[uid] then
+           rooms[uid] = get_room(uid)
+       end -- if
+       local foundpath = findpath(current_room, uid, false, false)
+       if foundpath ~= nil then
+           paths[uid] = {path=foundpath, reason=v.reason}
+       end
+   end
 
    for i,v in ipairs(dests) do
-      local uid = v.uid
-      if not rooms[uid] then
-         rooms[uid] = get_room(uid)
-      end -- if
-      local room = rooms[uid] -- ought to exist or wouldn't be in table
+       local uid = v.uid
+       local room = rooms[uid] -- ought to exist or wouldn't be in table
 
-      assert (room, "Room " .. v.uid .. " is not in rooms table.")
+       assert(room, "Room " .. v.uid .. " is not in rooms table.")
 
-      local room_name = room.name
-      room_name = room_name .. " (" .. room.area .. ")"
-      if show_uid then
-         room_name = room_name .. " (" .. v.uid .. ")"
-      end
+       local room_name = room.name
+       room_name = room_name .. " (" .. room.area .. ")"
+       if show_uid then
+           room_name = room_name .. " (" .. v.uid .. ")"
+       end
 
-      if current_room ~= v.uid then
-         table.insert(last_result_list, v.uid)
-         Hyperlink ("!!" .. GetPluginID () .. ":mapper.hyperlinkGoto("..v.uid..")",
-            "["..#last_result_list.."] "..room_name, "Click to speedwalk there", "", "", false, NoUnderline_hyperlinks)
-      else
-         ColourTell(RGBColourToName(MAPPER_NOTE_COLOUR.colour),"","[you are here] "..room_name)
-      end
+       local distance, distColor
+       if paths[uid] then
+           distance = #paths[uid].path .. " room" .. (#paths[uid].path > 1 and "s" or "") .. " away"
+           distColor = "springgreen"
+       else
+           distance = "Unreachable"
+           distColor = "darkorange"
+       end
 
-      local info = ""
-      if type (v.reason) == "string" and v.reason ~= "" then
-         info = " [" .. v.reason .. "]"
-         mapprint (" - " .. info) -- new line
-      else -- if
-         Note("")
-      end
+       table.insert(last_result_list, v.uid)
+       local TextColor, BackgroundColor
+       if (#last_result_list % 2 == 0) then
+           TextColor = "grey"
+           BackgroundColor = "#1F170F"
+       else
+           TextColor = "grey"
+           BackgroundColor = "black"
+       end
 
-      -- callback to display extra stuff (like find context, room description)
-      if fcb then
-         fcb (uid)
-      end -- if callback
+       if current_room ~= v.uid then
+           Hyperlink("!!" .. GetPluginID () .. ":mapper.hyperlinkGoto(" .. v.uid .. ")",
+               "[" .. #last_result_list .. "] " .. room_name, "Click to speedwalk there (" .. distance .. ")", TextColor, BackgroundColor, false, NoUnderline_hyperlinks)
+           ColourTell(TextColor, BackgroundColor, " - ")
+           ColourTell(distColor, BackgroundColor, distance .. "")
+       else
+           ColourTell(RGBColourToName(MAPPER_NOTE_COLOUR.colour), "", "[you are here] " .. room_name)
+       end
 
-      CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
+       local info = ""
+       if type(v.reason) == "string" and v.reason ~= "" then
+           info = " [" .. v.reason .. "]"
+           ColourTell(TextColor, BackgroundColor, " - " .. info .. "\n")
+       else -- if
+           ColourTell(TextColor, BackgroundColor, "\n")
+       end
+
+       -- callback to display extra stuff (like find context, room description)
+       if fcb then
+           fcb(uid)
+       end -- if callback
+
+       CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
    end -- for each room
 
-   Note("+-------------------------------- END OF SEARCH -------------------------------+")
+   utilprint("$x238+-------------------------------- $x208END OF SEARCH$x238 -------------------------------+")
+   local end_time = utils.timer()  -- End the timer
+   print(string.format("Quick search took %.3f seconds.", end_time - start_time))
 end
+
 
 function gotoNextResult(which)
    if tonumber(which) == nil then
@@ -1741,66 +1685,55 @@ end -- map_find_things
 
 -- build a speedwalk from a path into a string
 
-function build_speedwalk (path, prefix)
+local function build_speedwalk(path, prefix)
+    local stack_char = (GetOption("enable_command_stack") == 1) and GetAlphaOption("command_stack_character") or "\r\n"
 
-   stack_char = ";"
-   if GetOption("enable_command_stack")==1 then
-      stack_char = GetAlphaOption("command_stack_character")
-   else
-      stack_char = "\r\n"
-   end
+    -- Build speedwalk string (collect identical directions)
+    local tspeed = {}
+    for _, dir in ipairs(path) do
+        local n = #tspeed
+        if n > 0 and expand_direction[dir.dir] ~= nil and tspeed[n].dir == dir.dir then
+            tspeed[n].count = tspeed[n].count + 1
+        else
+            table.insert(tspeed, { dir = dir.dir, count = 1 })
+        end
+    end
 
-   -- build speedwalk string (collect identical directions)
-   local tspeed = {}
-   for _, dir in ipairs (path) do
-      local n = #tspeed
-      if n == 0 then
-         table.insert (tspeed, { dir = dir.dir, count = 1 })
-      else
-         if expand_direction[dir.dir] ~= nil and tspeed [n].dir == dir.dir then
-            tspeed [n].count = tspeed [n].count + 1
-         else
-            table.insert (tspeed, { dir = dir.dir, count = 1 })
-         end -- if different direction
-      end -- if
-   end -- for
+    if #tspeed == 0 then
+        return
+    end
 
-   if #tspeed == 0 then
-      return
-   end -- nowhere to go (current room?)
+    -- Build the speedwalk string
+    local s = {}
+    local new_command = false
+    for _, dir in ipairs(tspeed) do
+        if expand_direction[dir.dir] ~= nil then
+            if new_command then
+                table.insert(s, stack_char .. speedwalk_prefix .. " ")
+                new_command = false
+            end
+            if dir.count > 1 then
+                table.insert(s, tostring(dir.count))
+            end
+            table.insert(s, dir.dir)
+        else
+            table.insert(s, stack_char .. dir.dir)
+            new_command = true
+        end
+    end
 
-   -- now build string like: 2n3e4(sw)
-   local s = ""
+    local result = table.concat(s)
+    if prefix ~= nil then
+        if result:sub(1, #stack_char) == stack_char then
+            result = result:sub(#stack_char + 1)
+        else
+            result = prefix .. " " .. result
+        end
+    end
 
-   local new_command = false
-   for _, dir in ipairs (tspeed) do
-      if expand_direction[dir.dir] ~= nil then
-         if new_command then
-            s = s .. stack_char .. speedwalk_prefix .. " "
-            new_command = false
-         end
-         if dir.count > 1 then
-            s = s .. dir.count
-         end -- if
-         s = s .. dir.dir
-      else
-         s = s .. stack_char .. dir.dir
-         new_command = true
-      end -- if
-   end -- if
+    return result, stack_char
+end
 
-   if prefix ~= nil then
-      if s:sub(1, #stack_char) == stack_char then
-         s = s:sub(#stack_char+1)
-      else
-         s = prefix.." "..s
-      end
-   end
-
-   s = string.gsub(s, ";", stack_char)
-
-   return s, stack_char
-end -- build_speedwalk
 
 -- start a speedwalk to a path
 
@@ -2047,4 +1980,16 @@ function resize_move_callback()
    Theme.AddResizeTag(win, 1, nil, nil, "mapper.resize_mouse_down", "mapper.resize_move_callback", "mapper.resize_release_callback")
 
    WindowShow(win, true)
+end
+
+function utilprint(str, messageType)
+
+	if messageType == "error" then
+          AnsiNote(ColoursToANSI("@x238[@RDE@x202MO@x208N P@x214LU@x220G@x228IN @x220MA@x214NA@x208G@x202E@RR@x238]@W:@w"..str))
+     elseif messageType == "script" then
+          AnsiNote(ColoursToANSI("@x238@x238[@RDE@x202MO@x208N P@x214LU@x220G@x228IN @x220MA@x214NA@x208G@x202E@RR@x238]@c "..str))
+     else
+		AnsiNote(ColoursToANSI(str))
+	end
+	
 end
