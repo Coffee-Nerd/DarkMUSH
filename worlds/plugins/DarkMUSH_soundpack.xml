@@ -10,7 +10,7 @@
    purpose="Provide customizable comm and event sounds/triggers"
    date_written="2017-12-2 13:00:25"
    requires="4.76"
-   version="1.1"
+   version="1.2"
    save_state="y"
    >
 <description trim="y">
@@ -535,7 +535,7 @@
   <trigger
    enabled="n"
    group="Alert"
-   match="^You start to follow (.+)\.$"
+   match="^You now follow (.+)\.$"
    name="Follow"
    regexp="y"
    send_to="12"
@@ -582,6 +582,19 @@
   >
   <send>
    TriggerEvent("stop_follow")
+  </send>
+  </trigger>
+  <trigger
+   enabled="n"
+   group="Alert"
+   match="^You buy (.+) for (.+)\.$"
+   name="Buy"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>
+   TriggerEvent("buy")
   </send>
   </trigger>
   <trigger
@@ -933,6 +946,12 @@ local soundEvents = {
       panning = "0",
       description = "Sound when you stop following a player"
    },
+   ["buy"] = {
+      defaultwav = "purchase.wav",
+      volume = "100",
+      panning = "0",
+      description = "Sound when you buy something"
+   },
    ["warfare"] = {
       defaultwav = "warfare.wav",
       volume = "100",
@@ -1131,11 +1150,11 @@ local soundEvents = {
       panning = "0",
       description = "Comm Chan: Gsocial"
    },
-   ["gtell"] = {
+   ["group"] = {
       defaultwav = "gtell.wav",
       volume = "100",
       panning = "0",
-      description = "Comm Chan: Gtell"
+      description = "Comm Chan: group"
    },
    ["helper"] = {
       defaultwav = "helper.wav",
@@ -1674,10 +1693,10 @@ function OnPluginBroadcast (msg, id, name, text)
          self.name = gmcp("char.base.name")
       elseif (text == "comm.repop") then
          TriggerEvent("zone_repop")
-      elseif text == "com.chan" then
-         local channel = gmcp("com.chan.chan")
-         local msg = gmcp("com.chan.msg")
-         local player = gmcp("com.chan.player")
+      elseif text == "comm.channel" then
+         local channel = gmcp("comm.channel.chan")
+         local msg = gmcp("comm.channel.msg")
+         local player = gmcp("comm.channel.player")
 
          local rc, isMuted = CallPlugin("55616ea13339bc68e963e1f8", "checkIfMuted", player)
          if (rc == 0) and isMuted then
