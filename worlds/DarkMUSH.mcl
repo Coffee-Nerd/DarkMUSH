@@ -489,5 +489,6 @@ ColourNote("white", "green", "Added trigger "..(("%4" ~= "") and "to group '%4' 
 <include name="DarkMUSH_health_bars_gmcp.xml" plugin="y" />
 <include name="DarkMUSH_layout.xml" plugin="y" />
 <include name="DarkMUSH_GMCP_mapper.xml" plugin="y" />
+<include name="DarkMUSH_miniwindow_z_order_monitor.xml" plugin="y" />
 <include name="Hyperlink_URL2.xml" plugin="y" />
 </muclient>
