@@ -21,7 +21,7 @@
    purpose="GMCP map builder for DarkMUSH"
    date_written="2010-09-01 16:37:14"
    requires="4.73"
-   version="2.10"
+   version="2.20"
    save_state="y"
    >
 
@@ -341,7 +341,7 @@ Send("recon")
 ></alias>
 
 <alias
-   match="mapper purgeroom"
+   match="mapper delete room"
    enabled="y"
    sequence="100"
    send_to="12"
@@ -354,6 +354,21 @@ Send("recon")
    end
 </send>
 </alias>
+<alias
+   match="^mapper delete area (.+)$"
+   enabled="y"
+   regexp="y"
+   script="delete_area_by_name"
+>
+</alias>
+<alias
+  match="^mapper flags? (.*)$"
+  enabled="y"
+  regexp="y"
+  sequence="100"
+  script="updateRoomInfo">
+</alias>
+
 
 <alias
    match="mapper clearcache"
@@ -2058,6 +2073,35 @@ function map_purgezone (name, line, wildcards)
    mapper.mapprint ("Purged " .. zone_name .. " from the mapper database.")
 end
 
+function delete_area_by_name(name, line, wildcards)
+   local area = wildcards[1]
+   if not area then
+      Note("No area specified for deletion.")
+      return
+   end
+
+   local deleted_room_count = 0
+
+   -- Delete rooms from the Lua `rooms` table
+   for uid, room in pairs(rooms) do
+      if room.area == area then
+         rooms[uid] = nil  -- Delete room from Lua table
+         deleted_room_count = deleted_room_count + 1
+      end
+   end
+
+   -- Delete rooms from the database
+   local query = string.format("DELETE FROM rooms WHERE area = %s;", fixsql(area))
+   dbCheckExecute(query)
+
+   -- Optional: Delete from areas if needed
+   local query2 = string.format("DELETE FROM areas WHERE name = %s;", fixsql(area))
+   dbCheckExecute(query2)
+
+   Note(string.format("Deleted %d rooms from area '%s'.", deleted_room_count, area))
+end
+
+
 function room_purgeroom (room, uid)
    map_purgeroom(uid)
    mapper.draw(current_room)
@@ -2337,6 +2381,11 @@ function get_room (uid)
       notes = "\nNote: " .. room.notes
    end -- if notes
 
+   local building = ""
+   if room.building and room.building ~= "" then
+      building = "\nBuilding: " .. room.building
+   end -- if notes
+
    local flags = ""
    if room.norecall == 1 then
          flags = flags.."norecall "
@@ -2368,6 +2417,7 @@ function get_room (uid)
       terrain,
       info,
       notes,
+      building,
       flags
       -- depth,
       -- table.concat (path, ",")
@@ -2379,32 +2429,32 @@ function get_room (uid)
    room.fillbrush = 1 -- no fill
    -- special room fill colours
    local special_room = false
-   if room.info and room.info ~= "" then
-      if string.match (room.info, "shop") then
+   if room.building and room.building ~= "" then
+      if string.match (room.building, "shop") then
          special_room = true
          room.fillcolour = mapper.SHOP_FILL_COLOUR.colour
          room.fillbrush = 0  -- solid
-      elseif string.match (room.info, "healer") then
+      elseif string.match (room.building, "healer") then
          special_room = true
          room.fillcolour = mapper.HEALER_FILL_COLOUR.colour
          room.fillbrush = 0  -- solid
-      elseif string.match (room.info, "guild") then
+      elseif string.match (room.building, "guild") then
          special_room = true
          room.fillcolour = mapper.GUILD_FILL_COLOUR.colour
          room.fillbrush = 0 -- solid
-      elseif string.match (room.info, "trainer") then
+      elseif string.match (room.building, "trainer") then
          special_room = true
          room.fillcolour = mapper.TRAINER_FILL_COLOUR.colour
          room.fillbrush = 0 -- solid
-      elseif string.match (room.info, "questor") then
+      elseif string.match (room.building, "questor") then
          special_room = true
          room.fillcolour = mapper.QUESTOR_FILL_COLOUR.colour
          room.fillbrush = 0 -- solid
-      elseif string.match (room.info, "bank") then
+      elseif string.match (room.building, "bank") then
          special_room = true
          room.fillcolour = mapper.BANK_FILL_COLOUR.colour
          room.fillbrush = 0  -- solid
-      elseif string.match (room.info, "safe") then
+      elseif string.match (room.building, "safe") then
          special_room = true
          room.fillcolour = mapper.SAFEROOM_FILL_COLOUR.colour
          room.fillbrush = 0  -- solid
@@ -4229,6 +4279,110 @@ function map_area (name, line, wildcards)
    )
 end -- map_area
 
+valid_map_flags = {
+   ["weaponshop"] = true,
+   ["armorshop"] = true,
+   ["foodshop"] = true,
+   ["itemshop"] = true,
+   ["petshop"] = true,
+   ["tavern"] = true,
+   ["bank"] = true,
+   ["inn"] = true
+}
+
+function room_toggle(arguments)
+   local current_room_uid = current_room or 0  -- Assuming `current_room` holds the current room's UID
+   local room = rooms[current_room_uid]        -- Access the current room from the rooms table
+
+   if not room then
+      print("Room not found!")
+      return
+   end
+
+   if not valid_map_flags[arguments] then
+      print("Invalid flag: " .. arguments)
+      return
+   end
+
+   -- Toggle the flag in the room's building
+   if room.building then
+      if string.match(room.building, arguments) then
+         -- Flag exists, so remove it
+         room.building = string.gsub(room.building, arguments, "")
+         room.building = string.gsub(room.building, "%s+", " ")  -- Clean up extra spaces
+         print("Removed flag: " .. arguments)
+      else
+         -- Flag doesn't exist, so add it
+         room.building = room.building .. " " .. arguments
+         print("Added flag: " .. arguments)
+      end
+   else
+      -- No building flags yet, so initialize and add the flag
+      room.building = arguments
+      print("Added flag: " .. arguments)
+   end
+
+   -- Update the room in the database
+   add_update_room(current_room_uid, room)
+   mapper.draw(current_room_uid)
+end
+
+function updateRoomInfo(name, line, wildcards)
+   local valid_flags = {
+      ["waypoint"]="waypoint", ["bank"]="bank", ["alchemyguild"]="alchemyguild",
+      ["priest"]="priest", ["forge"]="forge", ["weaponshop"]="weaponshop", ["lightshop"]="lightshop",
+      ["armorshop"]="armorshop", ["petshop"]="petshop", ["itemshop"]="itemshop",
+      ["foodshop"]="foodshop", ["tavern"]="tavern", ["morgue"]="morgue", ["quest"]="quest",
+      ["fountain"]="fountain", ["gato"]="gato", ["moti"]="moti", ["inn"]="inn",
+      ["owlite"]="owlite", ["enchanter"]="enchanter", ["mage"]="mage"
+   }
+
+   local roomtype = wildcards[1] or ""
+   local room = wildcards[2] or current_room or 0
+   local roomuid = room
+   local matchFound = false
+   local new_flags = {}
+
+   -- Validate room flags
+   for word in roomtype:gmatch("%w+") do
+      if valid_flags[word] then
+         table.insert(new_flags, word)
+      else
+         print("Invalid flag: " .. word)
+         return
+      end
+   end
+
+   -- Check if the room exists
+   if rooms[roomuid] then
+      matchFound = true
+   end
+
+   if matchFound and rooms[roomuid] ~= nil then
+      if roomtype == "clear" then
+         rooms[roomuid].building = nil
+         print("Cleared flags from room: ", rooms[roomuid].name)
+      else
+         for _, flag in ipairs(new_flags) do
+            if not string.match(rooms[roomuid].building or "", flag) then
+               rooms[roomuid].building = (rooms[roomuid].building or "") .. " " .. flag
+               print("Added flag: ", flag, "to room: ", rooms[roomuid].name)
+            end
+         end
+      end
+      -- Update room info in the database
+      add_update_room(roomuid, rooms[roomuid])
+      mapper.draw(roomuid)
+   else
+      print("Room not found or not mapped.")
+   end
+end
+
+function add_update_room(roomuid, room)
+   dbCheckExecute(string.format("UPDATE rooms SET building = %s WHERE uid = %s;", fixsql(room.building), fixsql(roomuid)))
+end
+
+
 
 function map_find (name, line, wildcards)
    -- find matching rooms using FTS3
@@ -4781,8 +4935,8 @@ function OnHelp (name, line, wildcards)
 [[mapper addnote <note>          --> Ditto, but skips the dialog]],
 [[mapper delete note             --> Delete the note in the current room
                                  > without using the addnote dialog]],
-[[mapper purgezone <area>        --> Delete an area from the map database]],
-[[mapper purgeroom               --> Delete the current room from the database]],
+[[mapper delete area <area>      --> Delete an area from the map database]],
+[[mapper delete room               --> Delete the current room from the database]],
 [[mapper ignore mismatch <true/false> --> Don't change the room in the database
                                       > if only the exits are "wrong"]]
 },
