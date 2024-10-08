@@ -12,7 +12,7 @@ language="Lua"
 purpose="Showing affects in a window"
 date_written="2019-07-03 12:04:56"
 requires="5.00"
-version="2.2"
+version="2.22"
 >
 
 </plugin>
@@ -75,7 +75,7 @@ version="2.2"
 	
 	-- Miniwindow State
 	local winid = "win_" .. GetPluginID()
-	local version = "2.2"
+	local version = "2.22"
 	local hiddenWindow = winid .. "text_background_offscreen"
 	local bg_color = "#000000"
 	local last_refresh = 0 -- last window refresh
@@ -104,6 +104,7 @@ version="2.2"
 	debug = GetVariable("debug") or "false"
 	pulse_length = 1
 	end_times = {} -- When each spell will run out
+	bad_affect = false
 	-- In game name to filename map
 	
 	affect_icons = {
@@ -122,7 +123,7 @@ version="2.2"
 		["1024"] = "curse",
 		["131072"] = "sleep",
 		["2048"] = "haste",
-		["1"] = "blind",
+		["1"] = "blade_barrier",
 		["1073741824"] = "magic_only",
 		["33554432"] = "protect_good",
 		["16"] = "detect_magic",
@@ -188,7 +189,6 @@ version="2.2"
 		["35"] = "curse",
 		["103"] = "sleep",
 		-------------BITVECTORS BELOW-----------------
-		["1"] = "blind",
 		["1024"] = "curse",
 		["131072"] = "sleep"
 	}
@@ -445,9 +445,11 @@ version="2.2"
 		assert(type(movieInfo) == "table", "Argument to PlayMovie should be a table")
 	
 		-- see if already in table
-		if infos[info.filename] then
-		return -- if we have issues, remove this later... August 27th 2024
-		end -- if already there
+		for _, existingInfo in ipairs(infos) do
+			if existingInfo.filename == info.filename then
+				return
+			end
+		end
 	
 		local gotErrors = false
 	
@@ -617,7 +619,7 @@ version="2.2"
 		end -- if
 		if IsConnected() then -- only count down the timer/redraw when you're connected to the game
 			end_time = os.time()
-			current_time = duration
+			current_time = movieInfo.ticks_left
 			CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
 		end
 	
@@ -635,14 +637,6 @@ version="2.2"
 		frameCount = frameCount + 1
 	end -- PlayMovieFrame
 	lastRefresh = 0
-	function time_left()
-		duration = duration - DebugNote(duration)
-		if duration then
-			return string.format("%2i", duration)
-		else
-			return "??"
-		end
-	end
 	
 	-- --------------------------------------------------------------------
 	-- PlayAllMovieFrames - called by a timer every 1/10 second - calls
@@ -932,8 +926,6 @@ version="2.2"
 			start_x, start_y = WindowInfo(winid, 17), WindowInfo(winid, 18)
 		end
 		local x, y = WindowInfo(winid, 14), WindowInfo(winid, 15)
-		--print("X: "..x.." Y: "..y)
-		local n = tonumber(x)
 	
 		slot = -1
 		for i, j in ipairs(infos) do
@@ -941,9 +933,9 @@ version="2.2"
 				clickableX = infos[i].x
 				clickableY = infos[i].y
 				slot = i
-				--tprint(infos[i])
 				button = infos[i].filename
 				buttonInfo = infos[i].enabled
+				duration = infos[i].ticks_left -- Store the duration
 			end
 		end
 	
@@ -951,6 +943,7 @@ version="2.2"
 			return
 		end
 	
+		-- Highlight the selected slot
 		WindowRectOp(
 			winid,
 			1,
@@ -971,15 +964,18 @@ version="2.2"
 		return nil
 	end
 	
+
 	function MouseUp(flags, id, win)
 		if bit.band(flags, 0x20) ~= 0 then -- right click
 			right_click_menu()
 		end
 		pos_x, pos_y = WindowInfo(winid, 10), WindowInfo(winid, 11)
 		SaveState()
+	
 		if slot == -1 then
 			return
 		end
+	
 		WindowRectOp(
 			winid,
 			1,
@@ -989,20 +985,53 @@ version="2.2"
 			clickableY + image_size + 2,
 			ColourNameToRGB("bg_color")
 		)
-		-- show_window() --MAYBE to clear the red line
+	
+		-- If the affect is not enabled (bitvector is removed), try to recast it
 		if buttonInfo ~= true then
-			-- print(button)
 			button = button:gsub("%worlds\\plugins\\images\\affects\\", "")
 			button = button:gsub("%W%W%w+.png", "")
-			--print("BUTTON: ",button)
+	
+			-- Check if there are multiple affects with the same name
+			local spell_key = nil
 			for k, v in pairs(affect_icons) do
 				if button == affect_icons[k] then
-					key = find(affect_icons, button)
-					Execute("c " .. key)
+					spell_key = k
+					break
+				end
+			end
+	
+			-- If a spell with the same name is found
+			if spell_key then
+				-- Check for other affects with the same name but different numbers
+				local permanent_affect_found = false
+				local temporary_affect_key = nil
+	
+				for k, v in pairs(affect_icons) do
+					if v == affect_icons[spell_key] then
+						for _, info in ipairs(infos) do
+							if info.filename:match(affect_icons[k]) then
+								-- If one is permanent (-1), skip recasting it
+								if info.ticks_left == -1 then
+									permanent_affect_found = true
+								else
+									temporary_affect_key = k -- Store the key of the non-permanent affect
+								end
+							end
+						end
+					end
+				end
+	
+				-- If a permanent affect exists but we found a non-permanent version, cast the non-permanent one
+				if permanent_affect_found and temporary_affect_key then
+					Execute("c " .. temporary_affect_key)
+				elseif spell_key then
+					-- If no temporary affect was found, cast the current spell key
+					Execute("c " .. spell_key)
 				end
 			end
 		end
 	end
+	
 	
 	-- Dynamically populate spelllist based on affect_icons
 function populate_spelllist()
