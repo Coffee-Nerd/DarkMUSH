@@ -13,6 +13,7 @@ To enhance your gameplay, we recommend using our custom graphical client, **Dark
 3. **Open** the folder and launch `MUSHclient.exe`.
 4. On the top left, go to `File -> Open World -> DarkMUSH.mcl`.
 5. You're all set! Enjoy the immersive experience of Dark Wizardry with our custom client.
+![Screenshot 2025-01-31 121521](https://github.com/user-attachments/assets/3f59e75d-f7a1-45a5-b949-a07fd3390f42)
 
 ![Screenshot 2024-06-16 103814](https://github.com/Coffee-Nerd/DarkMUSH/assets/126441228/fa1207d5-7bc6-4973-98b6-64a58214b850)
 (Yes, there is currently a graphical issue in the group window, yes I'm fixing it soon :P)
