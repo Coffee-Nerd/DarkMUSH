@@ -12,7 +12,7 @@ language="Lua"
 purpose="Showing affects in a window"
 date_written="2019-07-03 12:04:56"
 requires="5.00"
-  version="2.22"
+  version="2.3"
 >
 
 </plugin>
@@ -50,6 +50,14 @@ requires="5.00"
       script="ToggleDebug"
       >
   </alias>
+  <alias
+  regexp="y"
+  match="^spellup$"
+  enabled="y"
+  sequence="100"
+  script="SpellUp"
+>
+</alias>
 </aliases>
 
 <!--  Triggers  -->
@@ -75,7 +83,7 @@ requires="5.00"
 	
 	-- Miniwindow State
 	local winid = "win_" .. GetPluginID()
-	local version = "2.22"
+	local version = "2.3"
 	local hiddenWindow = winid .. "text_background_offscreen"
 	local bg_color = "#000000"
 	local last_refresh = 0 -- last window refresh
@@ -191,6 +199,18 @@ requires="5.00"
 		-------------BITVECTORS BELOW-----------------
 		["1024"] = "curse",
 		["131072"] = "sleep"
+	}
+
+	local skills = {
+		alert = true,
+		clarity = true,
+		flurry = true,
+		camp = true,
+		swift = true,
+		fireshield = true,
+		frostshield = true,
+		hide = true,
+		sneak = true
 	}
 	
 	
@@ -991,16 +1011,14 @@ requires="5.00"
 			button = button:gsub("%worlds\\plugins\\images\\affects\\", "")
 			button = button:gsub("%W%W%w+.png", "")
 	
-			-- Check if there are multiple affects with the same name
 			local spell_key = nil
 			for k, v in pairs(affect_icons) do
-				if button == affect_icons[k] then
+				if button == v then
 					spell_key = k
 					break
 				end
 			end
 	
-			-- If a spell with the same name is found
 			if spell_key then
 				-- Check for other affects with the same name but different numbers
 				local permanent_affect_found = false
@@ -1010,27 +1028,34 @@ requires="5.00"
 					if v == affect_icons[spell_key] then
 						for _, info in ipairs(infos) do
 							if info.filename:match(affect_icons[k]) then
-								-- If one is permanent (-1), skip recasting it
 								if info.ticks_left == -1 then
 									permanent_affect_found = true
 								else
-									temporary_affect_key = k -- Store the key of the non-permanent affect
+									temporary_affect_key = k
 								end
 							end
 						end
 					end
 				end
 	
-				-- If a permanent affect exists but we found a non-permanent version, cast the non-permanent one
-				if permanent_affect_found and temporary_affect_key then
-					Execute("c " .. temporary_affect_key)
-				elseif spell_key then
-					-- If no temporary affect was found, cast the current spell key
-					Execute("c " .. spell_key)
+				-- Choose the recast command based on whether it is a skill or a spell.
+				local command = nil
+				if skills[button] then
+					command = button
+				else
+					if permanent_affect_found and temporary_affect_key then
+						command = "c " .. temporary_affect_key
+					else
+						command = "c " .. spell_key
+					end
+				end
+	
+				if command then
+					Execute(command)
 				end
 			end
 		end
-	end
+	end	
 	
 	
 	-- Dynamically populate spelllist based on affect_icons
@@ -1101,6 +1126,60 @@ function choose_spell_for_button(slot)
     SaveState()
     window(true)
 end
+
+-- Function to iterate through disabled (fallen) spells and attempt to recast them
+function SpellUp()
+    local recastCount = 0
+
+    -- Define the skills table
+    local skills = {
+        alert = true,
+        clarity = true,
+        flurry = true,
+        camp = true,
+        swift = true,
+        fireshield = true,
+        frostshield = true,
+        hide = true,
+        sneak = true
+    }
+
+    -- Loop over all affect infos
+    for _, info in ipairs(infos) do
+        if info.enabled == false then
+            -- Extract the spell name from the disabled filename.
+            -- Assumes disabled filename is in the format: "worlds\plugins\images\affects\spell_name_down.png"
+            local spell_name = info.disabled_filename:match("affects\\(.+)_down%.png")
+            if spell_name then
+                local spell_key = nil
+                for key, value in pairs(affect_icons) do
+                    if value == spell_name then
+                        spell_key = key
+                        break
+                    end
+                end
+                if spell_key then
+                    local command = nil
+                    if skills[spell_name] then
+                        command = spell_name
+                    else
+                        command = "c " .. spell_key
+                    end
+                    Execute(command)
+                    recastCount = recastCount + 1
+                end
+            end
+        end
+    end
+    if recastCount == 0 then
+        utilprint("$RNo spells to re-up.")
+    else
+        utilprint("$GRecasted " .. recastCount .. " spells.")
+    end
+end
+
+
+
 
 
 function right_click_menu(buttonIndex)
