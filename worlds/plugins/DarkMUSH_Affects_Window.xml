@@ -188,6 +188,16 @@ requires="5.00"
 		["336"] = "mind_focus", -- levitation
 		["309"] = "combat_mind", -- combat mind
 		["129"] = "alert",
+		["305"] = "biofeedback", -- biofeedback
+		["306"] = "blur",
+		["325"] = "energy_containment",
+		["344"] = "intellect_fortress",
+		["337"] = "mental_barrier",
+		["101"] = "shield",
+		["75"]  = "soul_web",
+		["370"] = "spirit_thief",
+		["346"] = "thought_shield",
+		["405"] = "shadow_decoy",
 	}
 	
 	-- We are using this as a set, these affects should be removed from the window
@@ -210,7 +220,8 @@ requires="5.00"
 		fireshield = true,
 		frostshield = true,
 		hide = true,
-		sneak = true
+		sneak = true,
+		shadow_decoy = true,
 	}
 	
 	
