@@ -191,9 +191,12 @@ requires="5.00"
 	selected_snapshot = GetVariable("selected_snapshot") or "default"
 	login_received = false -- flag to ignore affects until comm.login
 	connected = false -- flag to track connection state
+	pending_removals = {} -- queue of affects to be safely removed
+	pending_additions = {} -- queue of affects to be safely added
 	MIN_SIZE = 100
 	current_time = ""
 	path_prefix = "worlds\\plugins\\images\\affects\\"
+	path_prefix_64 = "worlds\\plugins\\images\\affects_64x64\\"
 	debug = GetVariable("debug") or "false"
 	pulse_length = 1
 	end_times = {} -- When each spell will run out
@@ -444,15 +447,9 @@ requires="5.00"
 			DebugNote("Spell: " .. spell)
 			DebugNote("Duration: " .. duration)
 			spell = string.gsub(spell, " ", "_")
-			local k, v = FindAffectInInfos(spell)
-			if (k == -1 and duration and affect_icons[spell] ~= nil) then
-				DebugNote("Adding New Timed Affect")
-				PlaceNewGIF(path_prefix .. affect_icons[spell], nil, duration, true)
-				DebugNote(infos.x)
-			elseif (duration and affect_icons[spell] ~= nil) then
-				v.enabled = true
-				v.ticks_left = duration
-			end -- if
+			
+			-- Queue this affect for safe addition instead of adding immediately
+			table.insert(pending_additions, {spell = spell, duration = duration})
 		end -- if
 	end -- AddEffectTimed
 	
@@ -465,15 +462,32 @@ requires="5.00"
 		name = string.gsub(name, "_", " ")
 		DebugNote("RemoveAffect")
 		if (name ~= nil) then
+			-- Queue this affect for safe removal instead of removing immediately
+			table.insert(pending_removals, name)
+		else
+			DebugNote("Name is nil")
+		end
+	end
+	
+	-- Safely process all pending removals without interfering with iterations
+	function ProcessPendingRemovals()
+		if #pending_removals == 0 then
+			return
+		end
+		
+		DebugNote("Processing " .. #pending_removals .. " pending removals")
+		
+		for _, name in ipairs(pending_removals) do
 			local k, v = FindAffectInInfos(name)
 			if affect_icons[name] then
 				affect = affect_icons[name]:lower()
 				if (k >= 0) then
 					if (bad_affects[name]) then
 						DebugNote("Removing bad affect " .. tostring(k))
-						table.remove(infos, k)
+						-- Mark for removal from infos table (will be cleaned up below)
+						v.markedForRemoval = true
 						v.enabled = false
-						-- Clear out the pixels of where the removed spell is going to be, and then draw it again using PlayMovieFrame (v)
+						-- Clear out the pixels of where the removed spell is going to be
 						if v and v.x and v.y then
 							WindowRectOp(
 								winid,
@@ -496,7 +510,6 @@ requires="5.00"
 						end
 						bad_affect = true
 						DebugNote("BAD AFFECT: ", bad_affect)
-						PlayMovieFrame(v) -- this is added in place of window(true) to avoid the flickering (MAYBE MOVE BACK DOWN TO WINDOW(TRUE) SPOT)
 					else
 						DebugNote("Showing disabled icon for " .. name)
 						bad_affect = false
@@ -511,9 +524,47 @@ requires="5.00"
 			else
 				DebugNote("affect_icons entry not found for: " .. name)
 			end
-		else
-			DebugNote("Name is nil")
 		end
+		
+		-- Now safely remove all marked affects from infos table
+		local new_infos = {}
+		for i, v in ipairs(infos) do
+			if not v.markedForRemoval then
+				table.insert(new_infos, v)
+			end
+		end
+		infos = new_infos
+		
+		-- Clear the pending removals queue
+		pending_removals = {}
+	end
+	
+	-- Safely process all pending additions without interfering with iterations
+	function ProcessPendingAdditions()
+		if #pending_additions == 0 then
+			return
+		end
+		
+		DebugNote("Processing " .. #pending_additions .. " pending additions")
+		
+		for _, addition in ipairs(pending_additions) do
+			local spell = addition.spell
+			local duration = addition.duration
+			
+			local k, v = FindAffectInInfos(spell)
+			if (k == -1 and duration and affect_icons[spell] ~= nil) then
+				DebugNote("Adding New Timed Affect")
+				-- Use 64x64 folder if image size is 64, otherwise use regular folder
+				local folder_path = (image_size == 64) and path_prefix_64 or path_prefix
+				PlaceNewGIF(folder_path .. affect_icons[spell], nil, duration, true)
+			elseif (duration and affect_icons[spell] ~= nil) then
+				v.enabled = true
+				v.ticks_left = duration
+			end -- if
+		end
+		
+		-- Clear the pending additions queue
+		pending_additions = {}
 	end
 	
 	function FindAffectInInfos(name)
@@ -657,7 +708,7 @@ requires="5.00"
 				movieInfo.y + imageHeight,
 				ColourNameToRGB("bg_color")
 			)
-			if WindowInfo(hiddenWindow, 4) == nil then
+			if WindowInfo("hiddenWindow", 4) == nil then
 				DebugNote("No hidden window, creating it now!")
 				WindowCreate(hiddenWindow, 0, 0, 0, 0, 12, 3, ColourNameToRGB(bg_color))
 			end
@@ -833,7 +884,10 @@ requires="5.00"
 	
 			v.lastDrawState = v.enabled
 		end
-	end -- PlayAllMovieFrames
+	-- Process any pending additions and removals at the end of the timer cycle
+	ProcessPendingAdditions()
+	ProcessPendingRemovals()
+end -- PlayAllMovieFrames
 	
 	---------------------------------------UTILITY FUNCTIONS START-------------------------------------------------
 	function swap(table1, table2, name)
@@ -910,6 +964,7 @@ requires="5.00"
 	end
 	
 	function do_tick()
+		-- Count down timers and queue affects for removal
 		for k, v in ipairs(infos) do
 			if v.enabled and v.ticks_left > -1 then
 				v.ticks_left = v.ticks_left - 1
@@ -917,11 +972,12 @@ requires="5.00"
 					-- Extract spell name from filename path
 					local spell_name = v.filename:match("affects\\(.+)_%d+%.png")
 					if spell_name then
-						RemoveAffect(spell_name)
+						RemoveAffect(spell_name) -- This will queue it safely
 					end
 				end
 			end
 		end
+		-- ProcessPendingRemovals() will be called at the end of PlayAllMovieFrames
 	end
 	
 	--SHOULD THIS BE IMAGE_SIZE??
@@ -1770,6 +1826,8 @@ end
 		-- Clear all affects data on disconnect and reset flags
 		infos = {}
 		active_affects = {}
+		pending_additions = {}
+		pending_removals = {}
 		login_received = false
 		connected = false
 		SaveState()
