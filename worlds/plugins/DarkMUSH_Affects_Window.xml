@@ -12,7 +12,7 @@ language="Lua"
 purpose="Showing affects in a window"
 date_written="2019-07-03 12:04:56"
 requires="5.00"
-  version="2.3"
+  version="3.0"
 >
 
 </plugin>
@@ -60,10 +60,42 @@ requires="5.00"
 </alias>
 <alias
 	regexp="y"
-	match="^affects track$"
+	match="^affects snapshot create (.+)$"
 	enabled="y"
 	sequence="100"
-	script="SaveActiveAffects"
+	script="CreateSnapshot"
+	>
+</alias>
+<alias
+	regexp="y"
+	match="^affects snapshot list$"
+	enabled="y"
+	sequence="100"
+	script="ListSnapshots"
+	>
+</alias>
+<alias
+	regexp="y"
+	match="^affects snapshot view (.+)$"
+	enabled="y"
+	sequence="100"
+	script="ViewSnapshot"
+	>
+</alias>
+<alias
+	regexp="y"
+	match="^affects snapshot select (.+)$"
+	enabled="y"
+	sequence="100"
+	script="SelectSnapshot"
+	>
+</alias>
+<alias
+	regexp="y"
+	match="^affects help$"
+	enabled="y"
+	sequence="100"
+	script="AffectsHelp"
 	>
 </alias>
 <alias
@@ -107,7 +139,7 @@ requires="5.00"
 	
 	-- Miniwindow State
 	local winid = "win_" .. GetPluginID()
-	local version = "2.3"
+	local version = "3.0"
 	local hiddenWindow = winid .. "text_background_offscreen"
 	local bg_color = "#000000"
 	local last_refresh = 0 -- last window refresh
@@ -131,6 +163,8 @@ requires="5.00"
 	affects = {}
 	active_affects = {} -- holds spell Id of active affects.
 	warned_about_missing_files = false
+	snapshots = {} -- holds all created snapshots
+	selected_snapshot = GetVariable("selected_snapshot") or "default"
 	MIN_SIZE = 100
 	current_time = ""
 	path_prefix = "worlds\\plugins\\images\\affects\\"
@@ -1204,10 +1238,138 @@ function choose_spell_for_button(slot)
     window(true)
 end
 
---Function to take active affects and save them to a list to be used for spellup.
-function SaveActiveAffects()
-	SetVariable("tracked_affects", json.encode(active_affects))
-  end
+-- Snapshot management functions
+function CreateSnapshot(name, line, wildcards)
+	local snapshot_name = wildcards[1]
+	if snapshot_name == "" then
+		utilprint("$RError: Please provide a snapshot name")
+		return
+	end
+	
+	-- Load existing snapshots
+	local snapshots_data = GetVariable("snapshots") or "{}"
+	snapshots = json.decode(snapshots_data)
+	
+	-- Save current active affects
+	snapshots[snapshot_name] = {}
+	for k, v in pairs(active_affects) do
+		snapshots[snapshot_name][k] = v
+	end
+	
+	-- Save snapshots back to variable
+	SetVariable("snapshots", json.encode(snapshots))
+	utilprint("$GSnapshot '$Y" .. snapshot_name .. "$G' created with " .. table_count(active_affects) .. " affects")
+end
+
+function ListSnapshots()
+	local snapshots_data = GetVariable("snapshots") or "{}"
+	snapshots = json.decode(snapshots_data)
+	
+	if table_count(snapshots) == 0 then
+		utilprint("$x238No snapshots found")
+		return
+	end
+	
+	utilprint("$x238" .. string.rep("-", 50))
+	utilprint("$WAffects Snapshots:")
+	utilprint("$x238" .. string.rep("-", 50))
+	
+	for name, data in pairs(snapshots) do
+		local color = "$x238"
+		local marker = ""
+		if name == selected_snapshot then
+			color = "$G"
+			marker = " $Y(selected)"
+		end
+		utilprint(color .. name .. " $x238- " .. table_count(data) .. " affects" .. marker)
+	end
+	utilprint("$x238" .. string.rep("-", 50))
+end
+
+function ViewSnapshot(name, line, wildcards)
+	local snapshot_name = wildcards[1]
+	local snapshots_data = GetVariable("snapshots") or "{}"
+	snapshots = json.decode(snapshots_data)
+	
+	if not snapshots[snapshot_name] then
+		utilprint("$RSnapshot '" .. snapshot_name .. "' not found")
+		return
+	end
+	
+	utilprint("$x238" .. string.rep("-", 50))
+	utilprint("$WSnapshot: $Y" .. snapshot_name)
+	utilprint("$x238" .. string.rep("-", 50))
+	
+	for spell_id, _ in pairs(snapshots[snapshot_name]) do
+		local spell_name = affect_icons[spell_id] or "unknown"
+		local status_color = "$x238"
+		local status_text = "DOWN"
+		
+		if active_affects[tonumber(spell_id)] then
+			status_color = "$G"
+			status_text = "UP"
+		end
+		
+		utilprint("$x238" .. spell_name:gsub("_", " ") .. ": " .. status_color .. status_text)
+	end
+	utilprint("$x238" .. string.rep("-", 50))
+end
+
+function SelectSnapshot(name, line, wildcards)
+	local snapshot_name = wildcards[1]
+	local snapshots_data = GetVariable("snapshots") or "{}"
+	snapshots = json.decode(snapshots_data)
+	
+	if not snapshots[snapshot_name] then
+		utilprint("$RSnapshot '" .. snapshot_name .. "' not found")
+		return
+	end
+	
+	selected_snapshot = snapshot_name
+	SetVariable("selected_snapshot", selected_snapshot)
+	utilprint("$GSelected snapshot: $Y" .. snapshot_name)
+end
+
+function table_count(t)
+	local count = 0
+	for _ in pairs(t) do
+		count = count + 1
+	end
+	return count
+end
+
+function AffectsHelp()
+	utilprint("$x238------------------------------------------------------------------------------------------")
+	utilprint("$WPlugin Name  : $RG$Yr$Ga$Cp$Bh$Mi$mc$Ra$Yl $x238Affects Window")
+	utilprint("$WAuthor       : $x238Demon")
+	utilprint("$WVersion      : $G" .. version)
+	utilprint("$x238------------------------------------------------------------------------------------------")
+	utilprint("")
+	utilprint("                       $x220Graphical $x220Affects Window Commands                            ")
+	utilprint("$x238------------------------------------------------------------------------------------------")
+	utilprint("")
+	utilprint("$Y affects snapshot create <name>      $R-->$W Creates a snapshot of current active affects")
+	utilprint("$Y affects snapshot list               $R-->$W Shows all snapshots with affect counts")
+	utilprint("$Y affects snapshot view <name>        $R-->$W Shows affects in a snapshot with status")
+	utilprint("$Y affects snapshot select <name>      $R-->$W Selects which snapshot to use for spellup")
+	utilprint("$Y affects show                        $R-->$W Shows the affects window")
+	utilprint("$Y affects hide                        $R-->$W Hides the affects window")
+	utilprint("$Y affects help                        $R-->$W Displays this help page")
+	utilprint("$Y spellup                             $R-->$W Recasts fallen spells from selected snapshot")
+	--utilprint("$Y affects window debug                $R-->$W Toggles debug mode on/off")
+	utilprint("")
+	utilprint("$W                            $x220Window Controls")
+	utilprint("$x238------------------------------------------------------------------------------------------")
+	utilprint("$Y Left Click on Icon                  $R-->$W Attempts to recast the spell/skill")
+	utilprint("$Y Right Click on Window               $R-->$W Opens context menu with options:")
+	utilprint("$Y   - Bring to Front/Send to Back     $R-->$W Changes window layering")
+	utilprint("$Y   - Set images to small (32)        $R-->$W Sets icon size to 32x32 pixels")
+	utilprint("$Y   - Set images to large (64)        $R-->$W Sets icon size to 64x64 pixels")
+	utilprint("$Y   - Choose Spell (in icon area)     $R-->$W Assigns spell to button slot")
+	utilprint("")
+	utilprint("$x238------------------------------------------------------------------------------------------")
+	utilprint("")
+end
 
 -- Function to iterate through disabled (fallen) spells and attempt to recast them
 function SpellUp()
@@ -1227,8 +1389,10 @@ function SpellUp()
         heighten_senses = true
     }
 
-    local output = GetVariable("tracked_affects") or ""
- 		local affects = json.decode(output)
+    -- Use selected snapshot instead of old tracked_affects
+    local snapshots_data = GetVariable("snapshots") or "{}"
+    local snapshots = json.decode(snapshots_data)
+    local affects = snapshots[selected_snapshot] or {}
 
     -- Loop over all affects
     for spell_key, v in pairs(affects) do
@@ -1324,11 +1488,36 @@ end
 	end
 	
 	function loaded()
-		utilprint("$W--------------------------------------------------------------------------------")
+		utilprint("$x238------------------------------------------------------------------------------------------")
 		utilprint("$WPlugin Name  : $RG$Yr$Ga$Cp$Bh$Mi$mc$Ra$Yl $x238Affects Window")
 		utilprint("$WAuthor       : $x238Demon")
 		utilprint("$WVersion      : $G" .. version)
-		utilprint("$W--------------------------------------------------------------------------------")
+		utilprint("$x238------------------------------------------------------------------------------------------")
+		utilprint("")
+		utilprint("                       $x220Graphical $x220Affects Window Commands                            ")
+		utilprint("$x238------------------------------------------------------------------------------------------")
+		utilprint("")
+		utilprint("$Y affects snapshot create <name>      $R-->$W Creates a snapshot of current active affects")
+		utilprint("$Y affects snapshot list               $R-->$W Shows all snapshots with affect counts")
+		utilprint("$Y affects snapshot view <name>        $R-->$W Shows affects in a snapshot with status")
+		utilprint("$Y affects snapshot select <name>      $R-->$W Selects which snapshot to use for spellup")
+		utilprint("$Y affects show                        $R-->$W Shows the affects window")
+		utilprint("$Y affects hide                        $R-->$W Hides the affects window")
+		utilprint("$Y affects help                        $R-->$W Displays this help page")
+		utilprint("$Y spellup                             $R-->$W Recasts fallen spells from selected snapshot")
+		--utilprint("$Y affects window debug                $R-->$W Toggles debug mode on/off")
+		utilprint("")
+		utilprint("$W                            $x220Window Controls")
+		utilprint("$x238------------------------------------------------------------------------------------------")
+		utilprint("$Y Left Click on Icon                  $R-->$W Attempts to recast the spell/skill")
+		utilprint("$Y Right Click on Window               $R-->$W Opens context menu with options:")
+		utilprint("$Y   - Bring to Front/Send to Back     $R-->$W Changes window layering")
+		utilprint("$Y   - Set images to small (32)        $R-->$W Sets icon size to 32x32 pixels")
+		utilprint("$Y   - Set images to large (64)        $R-->$W Sets icon size to 64x64 pixels")
+		utilprint("$Y   - Choose Spell (in icon area)     $R-->$W Assigns spell to button slot")
+		utilprint("")
+		utilprint("$x238------------------------------------------------------------------------------------------")
+		utilprint("")
 	end
 	
 	function OnPluginInstall()
