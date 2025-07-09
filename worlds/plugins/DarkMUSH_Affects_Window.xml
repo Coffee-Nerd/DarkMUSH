@@ -12,7 +12,7 @@ language="Lua"
 purpose="Showing affects in a window"
 date_written="2019-07-03 12:04:56"
 requires="5.00"
-  version="3.0"
+  version="3.2"
 >
 
 </plugin>
@@ -1573,39 +1573,7 @@ function table_count(t)
 end
 
 function AffectsHelp()
-	utilprint("$x238------------------------------------------------------------------------------------------")
-	utilprint("$WPlugin Name  : $RG$Yr$Ga$Cp$Bh$Mi$mc$Ra$Yl $x238Affects Window")
-	utilprint("$WAuthor       : $x238Demon")
-	utilprint("$WVersion      : $G" .. version)
-	utilprint("$x238------------------------------------------------------------------------------------------")
-	utilprint("")
-	utilprint("                       $x220Graphical $x220Affects Window Commands                            ")
-	utilprint("$x238------------------------------------------------------------------------------------------")
-	utilprint("")
-	utilprint("$Y affects snapshot create <name>      $R-->$W Creates a snapshot of current active affects")
-	utilprint("$Y affects snapshot list               $R-->$W Shows all snapshots with affect counts")
-	utilprint("$Y affects snapshot view <name>        $R-->$W Shows affects in a snapshot with status")
-	utilprint("$Y affects snapshot select <name>      $R-->$W Selects which snapshot to use for spellup")
-	utilprint("$Y affects snapshot update             $R-->$W Updates selected snapshot with current affects")
-	utilprint("$Y affects snapshot backups            $R-->$W Views backup history for selected snapshot")
-	utilprint("$Y affects snapshot restore <1-5>      $R-->$W Restores snapshot from backup (1=latest)")
-	utilprint("$Y affects show                        $R-->$W Shows the affects window")
-	utilprint("$Y affects hide                        $R-->$W Hides the affects window")
-	utilprint("$Y affects help                        $R-->$W Displays this help page")
-	utilprint("$Y spellup                             $R-->$W Recasts fallen spells from selected snapshot")
-	--utilprint("$Y affects window debug                $R-->$W Toggles debug mode on/off")
-	utilprint("")
-	utilprint("$W                            $x220Window Controls")
-	utilprint("$x238------------------------------------------------------------------------------------------")
-	utilprint("$Y Left Click on Icon                  $R-->$W Attempts to recast the spell/skill")
-	utilprint("$Y Right Click on Window               $R-->$W Opens context menu with options:")
-	utilprint("$Y   - Bring to Front/Send to Back     $R-->$W Changes window layering")
-	utilprint("$Y   - Set images to small (32)        $R-->$W Sets icon size to 32x32 pixels")
-	utilprint("$Y   - Set images to large (64)        $R-->$W Sets icon size to 64x64 pixels")
-	utilprint("$Y   - Choose Spell (in icon area)     $R-->$W Assigns spell to button slot")
-	utilprint("")
-	utilprint("$x238------------------------------------------------------------------------------------------")
-	utilprint("")
+	loaded()
 end
 
 -- Function to iterate through disabled (fallen) spells and attempt to recast them
@@ -1738,6 +1706,9 @@ end
 		utilprint("$Y affects snapshot list               $R-->$W Shows all snapshots with affect counts")
 		utilprint("$Y affects snapshot show <name>        $R-->$W Shows affects in a snapshot with status")
 		utilprint("$Y affects snapshot select <name>      $R-->$W Selects which snapshot to use for spellup")
+		utilprint("$Y affects snapshot update             $R-->$W Updates selected snapshot with current affects")
+		utilprint("$Y affects snapshot backups            $R-->$W Views backup history for selected snapshot")
+		utilprint("$Y affects snapshot restore <1-5>      $R-->$W Restores snapshot from backup (1=latest)")
 		utilprint("$Y affects show                        $R-->$W Shows the affects window")
 		utilprint("$Y affects hide                        $R-->$W Hides the affects window")
 		utilprint("$Y affects help                        $R-->$W Displays this help page")
