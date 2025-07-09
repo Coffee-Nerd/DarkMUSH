@@ -32,6 +32,22 @@ Aardwolf GCMP based health bars
    ignore_case="y"
    script="reset_aard"
 ></alias>
+<alias
+   match="^gauge(|s) hide$"
+   enabled="y"
+   regexp="y"
+   sequence="100"
+   ignore_case="y"
+   script="hide_gauge"
+></alias>
+<alias
+   match="^gauge(|s) show$"
+   enabled="y"
+   regexp="y"
+   sequence="100"
+   ignore_case="y"
+   script="show_gauge"
+></alias>
 </aliases>
 
 <!--  Script  -->
@@ -637,6 +653,14 @@ function LeftClickOnly(flags, hotspot_id, win)
       return true
    end
    return false
+end
+
+function hide_gauge()
+   WindowShow(win, false)
+end
+
+function show_gauge()
+   WindowShow(win, true)
 end
 
 ---------------------------------------------------------------------------------
