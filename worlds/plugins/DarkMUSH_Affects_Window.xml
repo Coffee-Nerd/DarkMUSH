@@ -910,6 +910,21 @@ end -- PlayAllMovieFrames
 	-- --------------------------------------------------------------------
 	-- PlaceNewGif (filename, frames)
 	--  filename (eg. "bread" ), expected to be in worlds/plugins/images/affects/filename_%03i.png
+	--[[
+      NOTE: We must convert all *_down.png images to RGBA format (PNG color type 6) using ImageMagick
+      because some engines/tools require a full 4-channel image (red, green, blue, alpha), even if
+      the image appears grayscale and has no transparency.
+
+      If the image is stored as Grayscale (color type 0) or Truecolor (color type 2),
+      it may be rejected or render incorrectly.
+
+      Use this shell command in the terminal to fix all such files in-place:
+
+      for f in *_down.png; do convert "$f" -alpha set -channel A -evaluate set 100% +channel -define png:color-type=6 "$f"; done
+
+     This forces an opaque alpha channel and saves the PNG as Truecolor+Alpha (RGBA).
+    ]]
+
 	-- --------------------------------------------------------------------
 	function PlaceNewGIF(filename, frames, duration, enabled)
 		local disabled_filename = filename .. "_down.png"
