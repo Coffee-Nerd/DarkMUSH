@@ -36,8 +36,9 @@ details captured through GMCP.
 
 -- show the group window
 <alias
-   match="groupon"
+   match="(groupon|group show)"
    enabled="y"
+   regexp="y"
    sequence="100"
    omit_from_output="y"
    script="ShowIt"
@@ -45,8 +46,9 @@ details captured through GMCP.
 
 -- hide the group window
 <alias
-   match="groupoff"
+   match="(groupoff|group hide)"
    enabled="y"
+   regexp="y"
    sequence="100"
    omit_from_output="y"
    script="HideIt"
