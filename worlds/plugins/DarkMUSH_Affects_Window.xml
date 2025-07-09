@@ -58,6 +58,30 @@ requires="5.00"
   script="SpellUp"
 >
 </alias>
+<alias
+	regexp="y"
+	match="^affects track$"
+	enabled="y"
+	sequence="100"
+	script="SaveActiveAffects"
+	>
+</alias>
+<alias
+    match="^affect(|s) hide$"
+    enabled="y"
+	regexp="y"
+    sequence="100"
+    script="HideAffects"
+    >
+</alias>
+<alias
+    match="^affect(|s) show$"
+    enabled="y"
+	regexp="y"
+    sequence="100"
+    script="ShowAffects"
+    >
+</alias>
 </aliases>
 
 <!--  Triggers  -->
@@ -75,9 +99,9 @@ requires="5.00"
 	require "themed_miniwindows"
 	require "tprint"
 	require "serialize"
-	require "movewindow"
 	require "gmcphelper"
 	require "utility"
+	require "json"
 	dofile(GetInfo(60) .. "telnet_options.lua")
 	dofile(GetInfo(60) .. "darkwiz_colors.lua")
 	
@@ -105,6 +129,7 @@ requires="5.00"
 	-- Global Vars
 	infos = {} -- this table is filled with the info of every gif
 	affects = {}
+	active_affects = {} -- holds spell Id of active affects.
 	warned_about_missing_files = false
 	MIN_SIZE = 100
 	current_time = ""
@@ -161,6 +186,8 @@ requires="5.00"
 		["375"] = "dragon_form",
 		["336"] = "mind_focus",
 		["7"] = "armor", -- armor
+		["328"] = "flesh_armor", -- flesh armor
+		["377"] = "holy_armor", -- holy armor
 		["105"] = "stone_skin", -- stone_skin
 		["316"] = "displacement", -- displacement
 		["348"] = "suicidal_attack",
@@ -387,29 +414,31 @@ requires="5.00"
 						table.remove(infos, k)
 						v.enabled = false
 						-- Clear out the pixels of where the removed spell is going to be, and then draw it again using PlayMovieFrame (v)
-						WindowRectOp(
-							winid,
-							2,
-							movieInfo.x,
-							movieInfo.y,
-							movieInfo.x + image_size,
-							movieInfo.y + image_size,
-							ColourNameToRGB("bg_color")
-						)
-						WindowRectOp(
-							winid,
-							2,
-							movieInfo.x,
-							movieInfo.y + image_size + text_margin_top,
-							movieInfo.x + image_size,
-							movieInfo.y + image_size + text_margin_top + text_height,
-							ColourNameToRGB("bg_color")
-						)
+						if v and v.x and v.y then
+							WindowRectOp(
+								winid,
+								2,
+								v.x,
+								v.y,
+								v.x + image_size,
+								v.y + image_size,
+								ColourNameToRGB("bg_color")
+							)
+							WindowRectOp(
+								winid,
+								2,
+								v.x,
+								v.y + image_size + text_margin_top,
+								v.x + image_size,
+								v.y + image_size + text_margin_top + text_height,
+								ColourNameToRGB("bg_color")
+							)
+						end
 						bad_affect = true
 						DebugNote("BAD AFFECT: ", bad_affect)
 						PlayMovieFrame(v) -- this is added in place of window(true) to avoid the flickering (MAYBE MOVE BACK DOWN TO WINDOW(TRUE) SPOT)
 					else
-						DebugNote("Showing disabled icon for " .. spell)
+						DebugNote("Showing disabled icon for " .. name)
 						bad_affect = false
 						v.enabled = false
 						affect = string.gsub(affect, " ", "_")
@@ -568,7 +597,7 @@ requires="5.00"
 				movieInfo.y + imageHeight,
 				ColourNameToRGB("bg_color")
 			)
-			if WindowInfo("hiddenWindow", 4) == nil then
+			if WindowInfo(hiddenWindow, 4) == nil then
 				DebugNote("No hidden window, creating it now!")
 				WindowCreate(hiddenWindow, 0, 0, 0, 0, 12, 3, ColourNameToRGB(bg_color))
 			end
@@ -590,8 +619,8 @@ requires="5.00"
 			DebugNote(path_prefix)
 			-- Now go ahead and draw the image (used to be alpha, and instead of stretch, 0.5)
 			if bad_affect == false then
-				print("drawing image")
-				print(image_down)
+				--print("drawing image")
+				--print(image_down)
 				errorCode =
 					WindowDrawImage(
 					winid,
@@ -701,19 +730,15 @@ requires="5.00"
 					ColourNameToRGB("bg_color")
 				)
 	
-				-- [DONE]TODO: Center the text using WindowTextWidth to compute text width before hand
+				-- Center the text using WindowTextWidth to compute text width before hand
 				timerWidth = WindowTextWidth(winid, "font", spell_timer)
-				if timerWidth <= 99 then
-					timerWidth = timerWidth + 8
-				elseif timerWidth <= 9 then
-					timerWidth = timerWidth + 16
-				end
-				--  DebugNote(timerWidth)
+				-- Calculate centered X position based on image_size
+				local centered_x = infos[i].x + (image_size - timerWidth) / 2
 				WindowText(
 					winid,
 					"font",
 					spell_timer,
-					infos[i].x + image_size / 4,
+					centered_x,
 					infos[i].y + image_size + text_margin_top,
 					0,
 					0,
@@ -725,9 +750,24 @@ requires="5.00"
 		for k, v in pairs(infos) do
 			-- We need to redraw if any of the following are true:
 			-- 1) v.lastDrawState == nil - the frame has never been drawn
-			-- 2) v.enabled is true - the animation is showing, needs to be updated every frame
+			-- 2) v.enabled is true AND frames > 1 - animated affects need constant updates
 			-- 3) v.lastDrawState ~= v.enabled - we are switching from enabled to disabled
-			if (v.lastDrawState == nil or v.enabled or v.lastDrawState ~= v.enabled) then
+			-- 4) v.enabled is true AND frames == 1 AND lastDrawState ~= enabled - static affects only on state change
+			-- 5) v.needsRedraw is true - force redraw after resize
+			local needsRedraw = false
+			
+			if v.lastDrawState == nil then
+				needsRedraw = true
+			elseif v.enabled and v.frames > 1 then
+				needsRedraw = true -- Always redraw animated affects
+			elseif v.lastDrawState ~= v.enabled then
+				needsRedraw = true -- State changed
+			elseif v.needsRedraw then
+				needsRedraw = true -- Force redraw after resize
+				v.needsRedraw = false -- Reset the flag
+			end
+			
+			if needsRedraw then
 				PlayMovieFrame(v)
 			end
 	
@@ -814,7 +854,11 @@ requires="5.00"
 			if v.enabled and v.ticks_left > -1 then
 				v.ticks_left = v.ticks_left - 1
 				if v.ticks_left == 0 then
-					RemoveAffect(v.filename)
+					-- Extract spell name from filename path
+					local spell_name = v.filename:match("affects\\(.+)_%d+%.png")
+					if spell_name then
+						RemoveAffect(spell_name)
+					end
 				end
 			end
 		end
@@ -829,6 +873,20 @@ requires="5.00"
 		x = x_off + cur_col * size
 		y = y_off + cur_row * size + cur_row * (text_height + text_margin_top)
 		return x, y
+	end
+
+	function HideAffects()
+		window_visible = false
+		WindowShow(winid, false)
+	end
+	
+	function ShowAffects()
+		window_visible = true
+		-- Set needsRedraw flag for all infos when showing window
+		for k, v in pairs(infos) do
+			v.needsRedraw = true
+		end
+		window(true)
 	end
 	
 	function window(redraw)
@@ -942,12 +1000,20 @@ requires="5.00"
 		end
 		
 		if (os.clock() - last_refresh >= 0.0333) then
+			-- Set needsRedraw flag for all infos after resize
+			for k, v in pairs(infos) do
+				v.needsRedraw = true
+			end
 			window(false)
 			last_refresh = os.clock()
 		end
 	end
 	
 	function ResizeReleaseCallback()
+		-- Set needsRedraw flag for all infos after resize is complete
+		for k, v in pairs(infos) do
+			v.needsRedraw = true
+		end
 		window(true)
 		SaveState()
 	end
@@ -1138,6 +1204,11 @@ function choose_spell_for_button(slot)
     window(true)
 end
 
+--Function to take active affects and save them to a list to be used for spellup.
+function SaveActiveAffects()
+	SetVariable("tracked_affects", json.encode(active_affects))
+  end
+
 -- Function to iterate through disabled (fallen) spells and attempt to recast them
 function SpellUp()
     local recastCount = 0
@@ -1152,36 +1223,28 @@ function SpellUp()
         fireshield = true,
         frostshield = true,
         hide = true,
-        sneak = true
+        sneak = true,
+        heighten_senses = true
     }
 
-    -- Loop over all affect infos
-    for _, info in ipairs(infos) do
-        if info.enabled == false then
-            -- Extract the spell name from the disabled filename.
-            -- Assumes disabled filename is in the format: "worlds\plugins\images\affects\spell_name_down.png"
-            local spell_name = info.disabled_filename:match("affects\\(.+)_down%.png")
-            if spell_name then
-                local spell_key = nil
-                for key, value in pairs(affect_icons) do
-                    if value == spell_name then
-                        spell_key = key
-                        break
-                    end
-                end
-                if spell_key then
-                    local command = nil
-                    if skills[spell_name] then
-                        command = spell_name
-                    else
-                        command = "c " .. spell_key
-                    end
-                    Execute(command)
-                    recastCount = recastCount + 1
-                end
-            end
-        end
+    local output = GetVariable("tracked_affects") or ""
+ 		local affects = json.decode(output)
+
+    -- Loop over all affects
+    for spell_key, v in pairs(affects) do
+  		local affect = affect_icons[spell_key]
+  		if affect and not active_affects[tonumber(spell_key)] then
+  			local command = nil
+  			if skills[affect] then
+  				command = affect
+  			else 
+  				command = "c " .. spell_key
+  			end
+  			Execute(command)
+      	recastCount = recastCount + 1
+  		end
     end
+	    
     if recastCount == 0 then
         utilprint("$RNo spells to re-up.")
     else
@@ -1223,9 +1286,17 @@ function right_click_menu(buttonIndex)
     elseif opt == 3 then
         image_size = 32
         SetVariable("image_size", image_size)
+        -- Set needsRedraw flag for all infos when changing image size
+        for k, v in pairs(infos) do
+            v.needsRedraw = true
+        end
     elseif opt == 4 then
         image_size = 64
         SetVariable("image_size", image_size)
+        -- Set needsRedraw flag for all infos when changing image size
+        for k, v in pairs(infos) do
+            v.needsRedraw = true
+        end
     elseif opt == 5 and slot ~= -1 and buttons[slot] then
         -- This option is only possible if "Choose Spell" was added, which means we're in a valid button zone
         choose_spell_for_button(slot)
@@ -1277,6 +1348,7 @@ end
 				spell = tonumber(gmcpval("spell"))
 				duration = tonumber(gmcpval("duration"))
 				AddAffectTimed(spell, duration)
+				active_affects[spell] = true
 			--	cast_queue()
 			end
 			if (text == "affoff") then
@@ -1285,6 +1357,7 @@ end
 				assert(loadstring(luastmt or ""))()
 				spell = tonumber(gmcpval("spell"))
 				RemoveAffect(spell)
+				active_affects[spell] = nil
 			end
 			if text == "comm.tick" then
 				res, gmcparg = CallPlugin("3e7dedbe37e44942dd46d264", "gmcpval", "comm.tick")
@@ -1299,6 +1372,7 @@ end
 	
 	function OnPluginDisable()
 		WindowDelete(winid)
+		SaveState()
 	end
 	
 	function OnPluginClose()
@@ -1314,10 +1388,6 @@ end
 	end
 	
 	function OnPluginWorldSave()
-		SaveState()
-	end
-	
-	function OnPluginDisable()
 		SaveState()
 	end
 	
