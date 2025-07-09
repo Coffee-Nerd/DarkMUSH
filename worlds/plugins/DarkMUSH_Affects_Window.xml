@@ -76,7 +76,7 @@ requires="5.00"
 </alias>
 <alias
 	regexp="y"
-	match="^affects snapshot view (.+)$"
+	match="^affects snapshot show (.+)$"
 	enabled="y"
 	sequence="100"
 	script="ViewSnapshot"
@@ -88,6 +88,30 @@ requires="5.00"
 	enabled="y"
 	sequence="100"
 	script="SelectSnapshot"
+	>
+</alias>
+<alias
+	regexp="y"
+	match="^affects snapshot update$"
+	enabled="y"
+	sequence="100"
+	script="UpdateSnapshot"
+	>
+</alias>
+<alias
+	regexp="y"
+	match="^affects snapshot restore ([1-5])$"
+	enabled="y"
+	sequence="100"
+	script="RestoreSnapshot"
+	>
+</alias>
+<alias
+	regexp="y"
+	match="^affects snapshot backups$"
+	enabled="y"
+	sequence="100"
+	script="ViewBackups"
 	>
 </alias>
 <alias
@@ -165,6 +189,8 @@ requires="5.00"
 	warned_about_missing_files = false
 	snapshots = {} -- holds all created snapshots
 	selected_snapshot = GetVariable("selected_snapshot") or "default"
+	login_received = false -- flag to ignore affects until comm.login
+	connected = false -- flag to track connection state
 	MIN_SIZE = 100
 	current_time = ""
 	path_prefix = "worlds\\plugins\\images\\affects\\"
@@ -1302,7 +1328,7 @@ function ViewSnapshot(name, line, wildcards)
 	
 	for spell_id, _ in pairs(snapshots[snapshot_name]) do
 		local spell_name = affect_icons[spell_id] or "unknown"
-		local status_color = "$x238"
+		local status_color = "$R"
 		local status_text = "DOWN"
 		
 		if active_affects[tonumber(spell_id)] then
@@ -1330,6 +1356,143 @@ function SelectSnapshot(name, line, wildcards)
 	utilprint("$GSelected snapshot: $Y" .. snapshot_name)
 end
 
+function UpdateSnapshot()
+	if not selected_snapshot then
+		utilprint("$RNo snapshot selected. Use 'affects snapshot select <name>' first")
+		return
+	end
+	
+	-- Load existing snapshots
+	local snapshots_data = GetVariable("snapshots") or "{}"
+	snapshots = json.decode(snapshots_data)
+	
+	if not snapshots[selected_snapshot] then
+		utilprint("$RSelected snapshot '" .. selected_snapshot .. "' not found")
+		return
+	end
+	
+	-- Create backup before updating
+	CreateSnapshotBackup(selected_snapshot, snapshots[selected_snapshot])
+	
+	-- Update selected snapshot with current active affects
+	snapshots[selected_snapshot] = {}
+	for k, v in pairs(active_affects) do
+		snapshots[selected_snapshot][k] = v
+	end
+	
+	-- Save snapshots back to variable
+	SetVariable("snapshots", json.encode(snapshots))
+	utilprint("$GSnapshot '$Y" .. selected_snapshot .. "$G' updated with " .. table_count(active_affects) .. " affects")
+end
+
+function CreateSnapshotBackup(snapshot_name, snapshot_data)
+	-- Load existing backups
+	local backups_data = GetVariable("snapshot_backups") or "{}"
+	local backups = json.decode(backups_data)
+	
+	if not backups[snapshot_name] then
+		backups[snapshot_name] = {}
+	end
+	
+	-- Add timestamp to backup
+	local backup_entry = {
+		data = snapshot_data,
+		timestamp = os.time()
+	}
+	
+	-- Insert at beginning of array
+	table.insert(backups[snapshot_name], 1, backup_entry)
+	
+	-- Keep only latest 5 backups
+	while #backups[snapshot_name] > 5 do
+		table.remove(backups[snapshot_name])
+	end
+	
+	-- Save backups
+	SetVariable("snapshot_backups", json.encode(backups))
+end
+
+function RestoreSnapshot(name, line, wildcards)
+	local backup_number = tonumber(wildcards[1])
+	
+	if not selected_snapshot then
+		utilprint("$RNo snapshot selected. Use 'affects snapshot select <name>' first")
+		return
+	end
+	
+	-- Load existing backups
+	local backups_data = GetVariable("snapshot_backups") or "{}"
+	local backups = json.decode(backups_data)
+	
+	if not backups[selected_snapshot] or not backups[selected_snapshot][backup_number] then
+		utilprint("$RBackup #" .. backup_number .. " not found for snapshot '" .. selected_snapshot .. "'")
+		return
+	end
+	
+	-- Load existing snapshots
+	local snapshots_data = GetVariable("snapshots") or "{}"
+	snapshots = json.decode(snapshots_data)
+	
+	-- Restore from backup
+	snapshots[selected_snapshot] = backups[selected_snapshot][backup_number].data
+	
+	-- Save snapshots back to variable
+	SetVariable("snapshots", json.encode(snapshots))
+	
+	local backup_time = os.date("%Y-%m-%d %H:%M:%S", backups[selected_snapshot][backup_number].timestamp)
+	utilprint("$GRestored snapshot '$Y" .. selected_snapshot .. "$G' from backup #" .. backup_number .. " (" .. backup_time .. ")")
+end
+
+function ViewBackups()
+	if not selected_snapshot then
+		utilprint("$RNo snapshot selected. Use 'affects snapshot select <name>' first")
+		return
+	end
+	
+	-- Load existing backups
+	local backups_data = GetVariable("snapshot_backups") or "{}"
+	local backups = json.decode(backups_data)
+	
+	if not backups[selected_snapshot] or #backups[selected_snapshot] == 0 then
+		utilprint("$x238No backups found for snapshot '$Y" .. selected_snapshot .. "$x238'")
+		return
+	end
+	
+	utilprint("$x238" .. string.rep("-", 70))
+	utilprint("$WBackups for snapshot: $Y" .. selected_snapshot)
+	utilprint("$x238" .. string.rep("-", 70))
+	
+	local current_time = os.time()
+	
+	for i, backup in ipairs(backups[selected_snapshot]) do
+		local backup_time = os.date("%Y-%m-%d %H:%M:%S", backup.timestamp)
+		local time_ago = FormatTimeAgo(current_time - backup.timestamp)
+		local affect_count = table_count(backup.data)
+		
+		utilprint(string.format("$Y#%d $x238- $W%s $x238(%s ago) $x238- $G%d affects", 
+			i, backup_time, time_ago, affect_count))
+	end
+	
+	utilprint("$x238" .. string.rep("-", 70))
+	utilprint("$x238Use '$Yaffects snapshot restore <number>$x238' to restore a backup")
+	utilprint("$x238" .. string.rep("-", 70))
+end
+
+function FormatTimeAgo(seconds)
+	if seconds < 60 then
+		return seconds .. " seconds"
+	elseif seconds < 3600 then
+		local minutes = math.floor(seconds / 60)
+		return minutes .. " minute" .. (minutes == 1 and "" or "s")
+	elseif seconds < 86400 then
+		local hours = math.floor(seconds / 3600)
+		return hours .. " hour" .. (hours == 1 and "" or "s")
+	else
+		local days = math.floor(seconds / 86400)
+		return days .. " day" .. (days == 1 and "" or "s")
+	end
+end
+
 function table_count(t)
 	local count = 0
 	for _ in pairs(t) do
@@ -1352,6 +1515,9 @@ function AffectsHelp()
 	utilprint("$Y affects snapshot list               $R-->$W Shows all snapshots with affect counts")
 	utilprint("$Y affects snapshot view <name>        $R-->$W Shows affects in a snapshot with status")
 	utilprint("$Y affects snapshot select <name>      $R-->$W Selects which snapshot to use for spellup")
+	utilprint("$Y affects snapshot update             $R-->$W Updates selected snapshot with current affects")
+	utilprint("$Y affects snapshot backups            $R-->$W Views backup history for selected snapshot")
+	utilprint("$Y affects snapshot restore <1-5>      $R-->$W Restores snapshot from backup (1=latest)")
 	utilprint("$Y affects show                        $R-->$W Shows the affects window")
 	utilprint("$Y affects hide                        $R-->$W Hides the affects window")
 	utilprint("$Y affects help                        $R-->$W Displays this help page")
@@ -1499,7 +1665,7 @@ end
 		utilprint("")
 		utilprint("$Y affects snapshot create <name>      $R-->$W Creates a snapshot of current active affects")
 		utilprint("$Y affects snapshot list               $R-->$W Shows all snapshots with affect counts")
-		utilprint("$Y affects snapshot view <name>        $R-->$W Shows affects in a snapshot with status")
+		utilprint("$Y affects snapshot show <name>        $R-->$W Shows affects in a snapshot with status")
 		utilprint("$Y affects snapshot select <name>      $R-->$W Selects which snapshot to use for spellup")
 		utilprint("$Y affects show                        $R-->$W Shows the affects window")
 		utilprint("$Y affects hide                        $R-->$W Hides the affects window")
@@ -1525,12 +1691,23 @@ end
 		window(true)
 	
 		DoAfterSpecial(.2, "loaded()", 12)
+		
+		-- Check if we're connected and request affects if so
+		if IsConnected() then
+			connected = true
+			login_received = true
+			Execute("aff")
+		end
 	end
 	
 	function OnPluginBroadcast(msg, id, name, text)
 		-- Look for GMCP handler.
 		if (id == "3e7dedbe37e44942dd46d264") then
 			if (text == "affon") then
+				-- Ignore affects until comm.login is received
+				if not login_received then
+					return
+				end
 				res, gmcparg = CallPlugin("3e7dedbe37e44942dd46d264", "gmcpval", "affon")
 				luastmt = "gmcpdata = " .. gmcparg
 				assert(loadstring(luastmt or ""))()
@@ -1541,6 +1718,10 @@ end
 			--	cast_queue()
 			end
 			if (text == "affoff") then
+				-- Ignore affects until comm.login is received
+				if not login_received then
+					return
+				end
 				res, gmcparg = CallPlugin("3e7dedbe37e44942dd46d264", "gmcpval", "affoff")
 				luastmt = "gmcpdata = " .. gmcparg
 				assert(loadstring(luastmt or ""))()
@@ -1551,6 +1732,11 @@ end
 			if text == "comm.tick" then
 				res, gmcparg = CallPlugin("3e7dedbe37e44942dd46d264", "gmcpval", "comm.tick")
 				do_tick()
+			end
+			if text == "comm.login" then
+				connected = true
+				login_received = true
+				Execute("aff")
 			end
 		end
 	end
@@ -1581,6 +1767,11 @@ end
 	end
 	
 	function OnPluginDisconnect()
+		-- Clear all affects data on disconnect and reset flags
+		infos = {}
+		active_affects = {}
+		login_received = false
+		connected = false
 		SaveState()
 	end
 	
