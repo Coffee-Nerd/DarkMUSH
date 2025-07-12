@@ -346,6 +346,11 @@ function renderPluginInfo(build_res, build_Len, ghName, pluginId)
             pluginlinelength = pluginlinelength + 9 -- This is for "[Latest] "
         end
       pluginlinelength = pluginlinelength + 9 -- This is for "[Reload] "
+      -- Add space for refresh button if plugin has multiple files
+      local fileCount = hpmVar["cache"][pluginId]["allFiles"] and #hpmVar["cache"][pluginId]["allFiles"] or 0
+      if fileCount > 1 then
+        pluginlinelength = pluginlinelength + 15 + #tostring(fileCount) -- This is for "[Refresh all X files] "
+      end
       pluginlinelength = pluginlinelength + 9 -- This is for "[Remove] "
       paddedpluginlinelength = string.rep(" ", 90 - pluginlinelength)
       TellUnicodeColours("" .. paddedpluginlinelength .. "")
@@ -357,6 +362,11 @@ function renderPluginInfo(build_res, build_Len, ghName, pluginId)
       end
         
       createColoredHyperlink("reloadPlugin " .. pluginId, "@x238[@YR@x220e@x214lo@x220a@Yd@x238] ", "Reload plugin") 
+      -- Show refresh button for plugins with multiple files
+      local fileCount = hpmVar["cache"][pluginId]["allFiles"] and #hpmVar["cache"][pluginId]["allFiles"] or 0
+      if fileCount > 1 then
+        createColoredHyperlink("updatePlugin " .. pluginId, "@x238[@x034R@x040e@x046f@x052r@x058e@x064s@x070h@x238] ", "Refresh all " .. fileCount .. " files") 
+      end
       createColoredHyperlink("removePlugin " .. pluginId, "@x238[@RRemove@x238] ", "Remove plugin")
       TellUnicodeColours("@x238│")
     else
@@ -411,7 +421,11 @@ function handleAsyncRequest(script_url, script_name)
         local retval, page, status, headers, full_status = script_rawurl:join()
 
         if status == 200 then
-            local lscript = io.open(script_name, "w")
+            local lscript = io.open(script_name, "wb")
+            -- Normalize line endings for text files
+            if script_name:match("%.xml$") or script_name:match("%.lua$") then
+                page = page:gsub("\r\n", "\n"):gsub("\r", "\n")
+            end
             lscript:write(page)
             lscript:close()
         end
@@ -430,46 +444,155 @@ function updateAllPluginFiles(script_id)
     if not cache_entry.allFiles then
         utilprint("No file list found for plugin: " .. (cache_entry.shortName or script_id), "error")
         utilprint("Cache entry exists but allFiles is missing", "error")
-        -- Fallback: try to update just the main XML file
-        if cache_entry.url then
-            local status = handleAsyncRequest(cache_entry.url, cache_entry.localName)
-            return status == 200
+        utilprint("Attempting to rebuild file list from rawPluginUrl", "script")
+        
+        -- Try to rebuild allFiles from rawPluginUrl
+        local allFiles = {cache_entry.url}  -- Start with main XML
+        if rawPluginUrl then
+            for pluginName, fileUrls in pairs(rawPluginUrl) do
+                if type(fileUrls) == "table" and #fileUrls > 0 then
+                    for _, url in ipairs(fileUrls) do
+                        if url == cache_entry.url then
+                            allFiles = fileUrls
+                            utilprint("Rebuilt file list with " .. #allFiles .. " files", "script")
+                            break
+                        end
+                    end
+                end
+            end
         end
-        return false
+        cache_entry.allFiles = allFiles
+        
+        -- Special case for GMCP Mapper - ensure Lua file is included
+        if (cache_entry.shortName or ""):upper():find("GMCP") and (cache_entry.shortName or ""):upper():find("MAPPER") then
+            local luaFile = "https://raw.githubusercontent.com/Coffee-Nerd/DarkMUSH/main/lua/darkwizmapper.lua"
+            local hasLuaFile = false
+            for _, file in ipairs(allFiles) do
+                if file == luaFile then
+                    hasLuaFile = true
+                    break
+                end
+            end
+            if not hasLuaFile then
+                table.insert(allFiles, luaFile)
+                utilprint("Added missing darkwizmapper.lua to file list", "script")
+            end
+            cache_entry.allFiles = allFiles
+        end
     end
     
     local script_directory = GetInfo(60)
     local success_count = 0
     local total_files = #cache_entry.allFiles
     
-    utilprint("Updating " .. total_files .. " files for " .. (cache_entry.shortName or script_id), "script")
-    
+    -- Handle directory references by downloading as ZIP instead of individual files
+    local expandedFiles = {}
     for _, fileUrl in ipairs(cache_entry.allFiles) do
+        if fileUrl:match("^%[DIR:(.+)%]$") then
+            local dirPath = fileUrl:match("^%[DIR:(.+)%]$")
+            utilprint("Found directory reference: " .. dirPath, "script")
+            
+            -- Try to download the entire directory as ZIP for faster operation
+            if dirPath:match("worlds/plugins/images$") then
+                utilprint("Attempting to download images directory as ZIP instead of 201+ individual files", "script")
+                local zipSuccess = downloadImagesAsZip(dirPath)
+                if not zipSuccess then
+                    -- ZIP failed, fall back to individual file downloads
+                    utilprint("ZIP download failed, falling back to individual file downloads", "script")
+                    local dirFiles = fetchDirectoryFiles(dirPath)
+                    for _, dirFile in ipairs(dirFiles) do
+                        table.insert(expandedFiles, dirFile)
+                    end
+                end
+                -- If ZIP succeeded, don't add individual files to expandedFiles
+            else
+                -- For other directories, use individual file downloads
+                utilprint("Expanding directory: " .. dirPath, "script")
+                local dirFiles = fetchDirectoryFiles(dirPath)
+                for _, dirFile in ipairs(dirFiles) do
+                    table.insert(expandedFiles, dirFile)
+                end
+            end
+        else
+            table.insert(expandedFiles, fileUrl)
+        end
+    end
+    
+    total_files = #expandedFiles
+    utilprint("Updating " .. total_files .. " files for " .. (cache_entry.shortName or script_id) .. " (forcing update of all associated files)", "script")
+    
+    for _, fileUrl in ipairs(expandedFiles) do
         local fileName = fileUrl:match("/([^/]+)$")
         local localPath
         
+        -- Determine the correct local path based on the GitHub URL structure
         if fileName:match("%.xml$") then
             localPath = script_directory .. fileName
-        elseif fileName:match("%.lua$") then
-            local lua_directory = script_directory .. "../lua/"
+        elseif fileUrl:match("/lua/[^/]+%.lua$") then
+            -- Lua files from /lua/ directory go to lua/ subdirectory
+            local base_directory = script_directory:gsub("worlds[/\\]plugins[/\\]*$", "")
+            local lua_directory = base_directory .. "lua/"
             os.execute("mkdir -p \"" .. lua_directory .. "\"")
             localPath = lua_directory .. fileName
-        elseif fileName:match("%.(bmp|png|jpg|jpeg|gif)$") then
+            utilprint("Lua file detected, saving to: " .. localPath, "script")
+        elseif fileName:match("%.lua$") then
+            -- Other lua files go to plugins directory
+            localPath = script_directory .. fileName
+        elseif fileName:match("%.zip$") and fileName == "images.zip" then
+            -- Special handling for pre-built images.zip
+            localPath = script_directory .. fileName
+            utilprint("Pre-built images ZIP detected, will extract to images directory", "script")
+        elseif fileName:match("%.bmp$") or fileName:match("%.png$") or fileName:match("%.jpg$") or fileName:match("%.jpeg$") or fileName:match("%.gif$") then
             local images_directory = script_directory .. "images/"
             os.execute("mkdir -p \"" .. images_directory .. "\"")
             localPath = images_directory .. fileName
+            utilprint("Image file detected, saving to: " .. localPath, "script")
         else
-            local misc_directory = script_directory .. "misc/"
-            os.execute("mkdir -p \"" .. misc_directory .. "\"")
-            localPath = misc_directory .. fileName
+            localPath = script_directory .. fileName
         end
         
+        utilprint("Downloading: " .. fileName .. " to " .. localPath, "script")
         local status = handleAsyncRequest(fileUrl, localPath)
         if status == 200 then
             success_count = success_count + 1
-            utilprint("Downloaded: " .. fileName, "script")
+            utilprint("Successfully downloaded: " .. fileName, "script")
+            
+            -- If this is the images.zip file, extract it
+            if fileName:match("%.zip$") and fileName == "images.zip" then
+                utilprint("Extracting images.zip to images directory", "script")
+                local images_directory = script_directory .. "images/"
+                
+                -- Create images directory (Windows/Unix compatible)
+                if os.getenv("OS") and os.getenv("OS"):lower():find("windows") then
+                    os.execute("mkdir \"" .. images_directory:gsub("/", "\\") .. "\" 2>nul")
+                else
+                    os.execute("mkdir -p \"" .. images_directory .. "\"")
+                end
+                
+                -- Extract ZIP file to images directory (Windows-compatible)
+                local extractCommand
+                if os.getenv("OS") and os.getenv("OS"):lower():find("windows") then
+                    -- Windows: Use PowerShell to extract ZIP
+                    extractCommand = "powershell -Command \"Expand-Archive -Path '" .. localPath .. "' -DestinationPath '" .. images_directory .. "' -Force\""
+                else
+                    -- Unix/Linux: Use unzip
+                    extractCommand = "cd \"" .. script_directory .. "\" && unzip -o \"" .. localPath .. "\" -d \"images/\""
+                end
+                
+                utilprint("Extracting with command: " .. extractCommand, "script")
+                local extractResult = os.execute(extractCommand)
+                
+                -- Clean up ZIP file
+                os.remove(localPath)
+                
+                if extractResult == 0 then
+                    utilprint("Successfully extracted images.zip to images directory", "script")
+                else
+                    utilprint("Failed to extract images.zip", "error")
+                end
+            end
         else
-            utilprint("Failed to download: " .. fileName, "error")
+            utilprint("Failed to download: " .. fileName .. " (Status: " .. tostring(status) .. ")", "error")
         end
     end
     
@@ -479,12 +602,12 @@ end
 
 function updatePlugin(name, line, wc)
     local script_id, script_name, script_url, script_pid = loadVariables(wc)
-    utilprint("Updating Plugin @G" .. hpmVar["cache"][script_id]["shortName"] .. "@w", "script")
+    utilprint("Updating Plugin @G" .. hpmVar["cache"][script_id]["shortName"] .. "@w (all associated files will be refreshed)", "script")
     UnloadPlugin(script_pid)
     
     local success = updateAllPluginFiles(script_id)
     if success then
-        utilprint("Plugin @G" .. hpmVar["cache"][script_id]["shortName"] .. "@c Updated Enjoy!", "script")
+        utilprint("Plugin @G" .. hpmVar["cache"][script_id]["shortName"] .. "@c Updated with all files! Enjoy!", "script")
         LoadPlugin(script_name)
     else
         utilprint("Plugin update failed for @R" .. hpmVar["cache"][script_id]["shortName"], "error")
@@ -520,6 +643,7 @@ function removePlugin(name, line, wc)
         utilprint("Was not able to remove @Y" .. hpmVar["cache"][script_id]["shortName"] .. " @R" .. err .. "@w", "error")
     end
 end
+
 
 function makeRawUrl()
      async_ok, async = pcall (require, "async")
@@ -559,13 +683,10 @@ function parsePluginList(content)
                 currentFiles = {}
             end
         elseif line:match("^%[DIR:(.+)%]$") then
-            -- Directory reference
+            -- Directory reference - store the directory path for later expansion
             if currentPlugin then
                 local dirPath = line:match("^%[DIR:(.+)%]$")
-                local dirFiles = fetchDirectoryFiles(dirPath)
-                for _, fileUrl in ipairs(dirFiles) do
-                    table.insert(currentFiles, fileUrl)
-                end
+                table.insert(currentFiles, "[DIR:" .. dirPath .. "]")
             end
         elseif line ~= "" and not line:match("^%[") then
             -- This is a file URL
@@ -588,6 +709,100 @@ function parsePluginList(content)
     end
     
     return plugins
+end
+
+function downloadImagesAsZip(dirPath)
+    local async_ok, async = pcall(require, "async")
+    if not async_ok then
+        utilprint("Async module not available for ZIP downloading", "error")
+        return false
+    end
+    
+    -- Convert directory path to GitHub ZIP download URL
+    local repo, branch, path = dirPath:match("([^/]+/[^/]+)/([^/]+)/(.+)")
+    if not repo or not branch or not path then
+        utilprint("Invalid directory path format for ZIP download: " .. dirPath, "error")
+        return false
+    end
+    
+    -- Create GitHub directory URL for DownGit service
+    local githubDirUrl = "https://github.com/" .. repo .. "/tree/" .. branch .. "/" .. path
+    
+    -- URL encode the GitHub directory URL for DownGit
+    local function urlEncode(str)
+        return string.gsub(str, "([^%w%-%.%_%~])", function(c)
+            return string.format("%%%02X", string.byte(c))
+        end)
+    end
+    
+    local encodedGithubUrl = urlEncode(githubDirUrl)
+    local downGitUrl = "https://minhaskamal.github.io/DownGit/#/home?url=" .. encodedGithubUrl .. "&rootDirectory=false"
+    
+    utilprint("Attempting to download directory via DownGit: " .. githubDirUrl, "script")
+    utilprint("DownGit URL: " .. downGitUrl, "script")
+    
+    -- For now, let's try the direct GitHub archive downloads as DownGit may need special handling
+    local zipUrls = {
+        "https://codeload.github.com/" .. repo .. "/zip/refs/heads/" .. branch,
+        "https://github.com/" .. repo .. "/archive/refs/heads/" .. branch .. ".zip"
+    }
+    
+    local zipSuccess = false
+    local page = nil
+    local status = nil
+    
+    for i, zipUrl in ipairs(zipUrls) do
+        utilprint("Attempting ZIP download " .. i .. "/" .. #zipUrls .. " from: " .. zipUrl, "script")
+        local request = async.request(zipUrl, "HTTPS")
+        local retval, tempPage, tempStatus, headers, full_status = request:join()
+        
+        if tempStatus == 200 and tempStatus ~= "ssl" then
+            page = tempPage
+            status = tempStatus
+            zipSuccess = true
+            utilprint("ZIP download successful from URL " .. i, "script")
+            break
+        else
+            utilprint("ZIP URL " .. i .. " failed (Status: " .. tostring(tempStatus) .. ")", "script")
+        end
+    end
+    
+    if not zipSuccess then
+        utilprint("All ZIP download attempts failed, falling back to individual files", "script")
+        return false
+    end
+    
+    -- Save ZIP file temporarily
+    local script_directory = GetInfo(60)
+    local tempZipPath = script_directory .. "temp_images.zip"
+    local zipFile = io.open(tempZipPath, "wb")
+    if not zipFile then
+        utilprint("Failed to create temporary ZIP file", "error")
+        return false
+    end
+    zipFile:write(page)
+    zipFile:close()
+    
+    utilprint("Downloaded ZIP file, extracting images...", "script")
+    
+    -- Extract only the images directory from the ZIP
+    local images_directory = script_directory .. "images/"
+    os.execute("mkdir -p \"" .. images_directory .. "\"")
+    
+    -- Use system unzip to extract - this will work on most systems
+    local extractCommand = "cd \"" .. script_directory .. "\" && unzip -j -o \"" .. tempZipPath .. "\" \"*/" .. path .. "/*\" -d \"images/\""
+    local extractResult = os.execute(extractCommand)
+    
+    -- Clean up temporary ZIP file
+    os.remove(tempZipPath)
+    
+    if extractResult == 0 then
+        utilprint("Successfully extracted images directory from ZIP", "script")
+        return true
+    else
+        utilprint("Failed to extract ZIP file", "error")
+        return false
+    end
 end
 
 function fetchDirectoryFiles(dirPath)
@@ -721,11 +936,23 @@ function raw_get_cache(retval, page, status, headers, full_status, request_url)
         if hpmVar and hpmVar["pluginFiles"] and hpmVar["pluginFiles"][request_url] then
             allFiles = hpmVar["pluginFiles"][request_url]
         else
-            -- Fallback: just the main XML file
+            -- Fallback: just the main XML file, but also search rawPluginUrl
             allFiles = {request_url}
+            if rawPluginUrl then
+                for pluginName, fileUrls in pairs(rawPluginUrl) do
+                    if type(fileUrls) == "table" and #fileUrls > 0 then
+                        for _, url in ipairs(fileUrls) do
+                            if url == request_url then
+                                allFiles = fileUrls
+                                utilprint("Found " .. #allFiles .. " files for plugin from rawPluginUrl (including directory references)", "script")
+                                break
+                            end
+                        end
+                    end
+                end
+            end
         end
         
-        hpmVar["cache"][pluginId] = {}
     else
         utilprint("Can't connect to GitHub", "error")
         return
