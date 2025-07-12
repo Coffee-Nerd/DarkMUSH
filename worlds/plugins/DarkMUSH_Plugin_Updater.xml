@@ -11,7 +11,7 @@
    save_state="y"
    date_written="2022-10-24 00:00:00"
    requires="4.00"
-   version="2.25"
+   version="3.00"
    >
 
 </plugin>
@@ -192,16 +192,37 @@ function pmList()
     makeRawUrl()
     buildCache()
 
-    build_Len = tablelength(rawPluginUrl)
+    build_Len = getPluginCount(rawPluginUrl)
     build_res = 0
 
    -- utilprint("@x238+---------------------[...]")
-    for a, b in pairs(rawPluginUrl) do
-        if b ~= "" then
-            async_ok, async = pcall(require, "async")
-            ghName = async.doAsyncRemoteRequest(b, buildOutput, "HTTPS")
+    for pluginName, fileUrls in pairs(rawPluginUrl) do
+        if type(fileUrls) == "table" and #fileUrls > 0 then
+            -- Find the main XML file (first .xml file in the list)
+            local mainXmlUrl = nil
+            for _, url in ipairs(fileUrls) do
+                if url:match("%.xml$") then
+                    mainXmlUrl = url
+                    break
+                end
+            end
+            
+            if mainXmlUrl then
+                async_ok, async = pcall(require, "async")
+                ghName = async.doAsyncRemoteRequest(mainXmlUrl, buildOutput, "HTTPS")
+            end
         end
     end
+end
+
+function getPluginCount(pluginTable)
+    local count = 0
+    for pluginName, fileUrls in pairs(pluginTable) do
+        if type(fileUrls) == "table" and #fileUrls > 0 then
+            count = count + 1
+        end
+    end
+    return count
 end
 
 function buildOutput(retval, page, status, headers, full_status, request_url)
@@ -399,21 +420,88 @@ function handleAsyncRequest(script_url, script_name)
     return nil
 end
 
+function updateAllPluginFiles(script_id)
+    local cache_entry = hpmVar["cache"][script_id]
+    if not cache_entry then
+        utilprint("No cache entry found for plugin ID: " .. script_id, "error")
+        return false
+    end
+    
+    if not cache_entry.allFiles then
+        utilprint("No file list found for plugin: " .. (cache_entry.shortName or script_id), "error")
+        utilprint("Cache entry exists but allFiles is missing", "error")
+        -- Fallback: try to update just the main XML file
+        if cache_entry.url then
+            local status = handleAsyncRequest(cache_entry.url, cache_entry.localName)
+            return status == 200
+        end
+        return false
+    end
+    
+    local script_directory = GetInfo(60)
+    local success_count = 0
+    local total_files = #cache_entry.allFiles
+    
+    utilprint("Updating " .. total_files .. " files for " .. (cache_entry.shortName or script_id), "script")
+    
+    for _, fileUrl in ipairs(cache_entry.allFiles) do
+        local fileName = fileUrl:match("/([^/]+)$")
+        local localPath
+        
+        if fileName:match("%.xml$") then
+            localPath = script_directory .. fileName
+        elseif fileName:match("%.lua$") then
+            local lua_directory = script_directory .. "../lua/"
+            os.execute("mkdir -p \"" .. lua_directory .. "\"")
+            localPath = lua_directory .. fileName
+        elseif fileName:match("%.(bmp|png|jpg|jpeg|gif)$") then
+            local images_directory = script_directory .. "images/"
+            os.execute("mkdir -p \"" .. images_directory .. "\"")
+            localPath = images_directory .. fileName
+        else
+            local misc_directory = script_directory .. "misc/"
+            os.execute("mkdir -p \"" .. misc_directory .. "\"")
+            localPath = misc_directory .. fileName
+        end
+        
+        local status = handleAsyncRequest(fileUrl, localPath)
+        if status == 200 then
+            success_count = success_count + 1
+            utilprint("Downloaded: " .. fileName, "script")
+        else
+            utilprint("Failed to download: " .. fileName, "error")
+        end
+    end
+    
+    utilprint("Downloaded " .. success_count .. "/" .. total_files .. " files", "script")
+    return success_count == total_files
+end
+
 function updatePlugin(name, line, wc)
     local script_id, script_name, script_url, script_pid = loadVariables(wc)
     utilprint("Updating Plugin @G" .. hpmVar["cache"][script_id]["shortName"] .. "@w", "script")
     UnloadPlugin(script_pid)
-    local status = handleAsyncRequest(script_url, script_name)
-    utilprint("Plugin @G" .. hpmVar["cache"][script_id]["shortName"] .. "@c Updated Enjoy!", "script")
-    LoadPlugin(script_name)
+    
+    local success = updateAllPluginFiles(script_id)
+    if success then
+        utilprint("Plugin @G" .. hpmVar["cache"][script_id]["shortName"] .. "@c Updated Enjoy!", "script")
+        LoadPlugin(script_name)
+    else
+        utilprint("Plugin update failed for @R" .. hpmVar["cache"][script_id]["shortName"], "error")
+    end
 end
 
 function installPlugin(name, line, wc)
     local script_id, script_name, script_url, script_pid = loadVariables(wc)
     utilprint("@x238Installing Plugin @Y" .. hpmVar["cache"][script_id]["shortName"] .. "@w", "script")
-    local status = handleAsyncRequest(script_url, script_name)
-    utilprint("@x238Plugin @Y" .. hpmVar["cache"][script_id]["shortName"] .. "@x238 Installed... Enjoy!", "script")
-    LoadPlugin(script_name)
+    
+    local success = updateAllPluginFiles(script_id)
+    if success then
+        utilprint("@x238Plugin @Y" .. hpmVar["cache"][script_id]["shortName"] .. "@x238 Installed... Enjoy!", "script")
+        LoadPlugin(script_name)
+    else
+        utilprint("Plugin installation failed for @R" .. hpmVar["cache"][script_id]["shortName"], "error")
+    end
 end
 function reloadPlugin(name, line, wc)
     local script_id, script_name, script_url, script_pid = loadVariables(wc)
@@ -440,10 +528,108 @@ function makeRawUrl()
           retval, page, status, headers, full_status = makeRawURL:join()
           
           if status == 200 then
-               rawPluginUrl = string.explode(page,"\n")
+               rawPluginUrl = parsePluginList(page)
           end--end 200
      end --end async_ok
      return rawPluginUrl
+end
+
+function parsePluginList(content)
+    local lines = string.explode(content, "\n")
+    local plugins = {}
+    local currentPlugin = nil
+    local currentFiles = {}
+    
+    for _, line in ipairs(lines) do
+        line = line:match("^%s*(.-)%s*$") -- trim whitespace
+        
+        if line:match("^%[PLUGIN:(.+)%]$") then
+            -- Start of new plugin
+            if currentPlugin then
+                -- Save previous plugin
+                plugins[currentPlugin] = currentFiles
+            end
+            currentPlugin = line:match("^%[PLUGIN:(.+)%]$")
+            currentFiles = {}
+        elseif line == "[END]" then
+            -- End of current plugin
+            if currentPlugin then
+                plugins[currentPlugin] = currentFiles
+                currentPlugin = nil
+                currentFiles = {}
+            end
+        elseif line:match("^%[DIR:(.+)%]$") then
+            -- Directory reference
+            if currentPlugin then
+                local dirPath = line:match("^%[DIR:(.+)%]$")
+                local dirFiles = fetchDirectoryFiles(dirPath)
+                for _, fileUrl in ipairs(dirFiles) do
+                    table.insert(currentFiles, fileUrl)
+                end
+            end
+        elseif line ~= "" and not line:match("^%[") then
+            -- This is a file URL
+            if currentPlugin then
+                table.insert(currentFiles, line)
+            else
+                -- Legacy format - single URL without plugin grouping
+                -- Extract plugin name from URL for backward compatibility
+                local pluginName = line:match("/([^/]+)%.xml$")
+                if pluginName then
+                    plugins[pluginName] = {line}
+                end
+            end
+        end
+    end
+    
+    -- Handle case where file ends without [END]
+    if currentPlugin then
+        plugins[currentPlugin] = currentFiles
+    end
+    
+    return plugins
+end
+
+function fetchDirectoryFiles(dirPath)
+    local async_ok, async = pcall(require, "async")
+    if not async_ok then
+        utilprint("Async module not available for directory fetching", "error")
+        return {}
+    end
+    
+    -- Convert directory path to GitHub API URL
+    -- Expected format: "Coffee-Nerd/DarkMUSH/main/worlds/plugins/images"
+    local repo, branch, path = dirPath:match("([^/]+/[^/]+)/([^/]+)/(.+)")
+    if not repo or not branch or not path then
+        utilprint("Invalid directory path format: " .. dirPath, "error")
+        return {}
+    end
+    
+    local apiUrl = "https://api.github.com/repos/" .. repo .. "/contents/" .. path .. "?ref=" .. branch
+    local request = async.request(apiUrl, "HTTPS")
+    local retval, page, status, headers, full_status = request:join()
+    
+    if status ~= 200 then
+        utilprint("Failed to fetch directory: " .. dirPath .. " (Status: " .. status .. ")", "error")
+        return {}
+    end
+    
+    local json = require("json")
+    local success, dirContents = pcall(json.decode, page)
+    if not success then
+        utilprint("Failed to parse directory JSON for: " .. dirPath, "error")
+        return {}
+    end
+    
+    local fileUrls = {}
+    for _, item in ipairs(dirContents) do
+        if item.type == "file" and item.download_url then
+            table.insert(fileUrls, item.download_url)
+        end
+    end
+    
+    utilprint("Found " .. #fileUrls .. " files in directory: " .. dirPath, "script")
+    return fileUrls
 end
 
 function raw_get(retval, page, status, headers, full_status, request_url)
@@ -455,7 +641,9 @@ end
 function tablelength(T)
   local count = 0
   for i,v in pairs(T) do 
-     if v ~= "" then
+     if type(v) == "table" and #v > 0 then
+          count = count + 1
+     elseif type(v) == "string" and v ~= "" then
           count = count + 1
      end
   end
@@ -463,8 +651,30 @@ function tablelength(T)
 end
 
 function buildCache()
-    cache_Len = tablelength(rawPluginUrl)
+    cache_Len = getPluginCount(rawPluginUrl)
     cache_res = 0
+    
+    -- Store plugin file mappings for later use in cache building
+    if not hpmVar then hpmVar = {} end
+    if not hpmVar["pluginFiles"] then hpmVar["pluginFiles"] = {} end
+    
+    for pluginName, fileUrls in pairs(rawPluginUrl) do
+        if type(fileUrls) == "table" and #fileUrls > 0 then
+            -- Find the main XML file for cache building
+            local mainXmlUrl = nil
+            for _, url in ipairs(fileUrls) do
+                if url:match("%.xml$") then
+                    mainXmlUrl = url
+                    break
+                end
+            end
+            
+            if mainXmlUrl then
+                -- Store the file list mapped by the main XML URL
+                hpmVar["pluginFiles"][mainXmlUrl] = fileUrls
+            end
+        end
+    end
     
     local async_ok, async = pcall(require, "async")
     if async_ok then
@@ -473,9 +683,20 @@ function buildCache()
             return
         end
         
-        for a, b in pairs(rawPluginUrl) do
-            if b ~= "" then
-                async.doAsyncRemoteRequest(b, raw_get_cache, "HTTPS")
+        for pluginName, fileUrls in pairs(rawPluginUrl) do
+            if type(fileUrls) == "table" and #fileUrls > 0 then
+                -- Find the main XML file for cache building
+                local mainXmlUrl = nil
+                for _, url in ipairs(fileUrls) do
+                    if url:match("%.xml$") then
+                        mainXmlUrl = url
+                        break
+                    end
+                end
+                
+                if mainXmlUrl then
+                    async.doAsyncRemoteRequest(mainXmlUrl, raw_get_cache, "HTTPS")
+                end
             end
         end
     else
@@ -494,6 +715,16 @@ function raw_get_cache(retval, page, status, headers, full_status, request_url)
         purpose = string.match(page, '%s+purpose="([^"]+)"')
         localVersion = GetPluginInfo(pluginId, 19)
         localName = script_directory.. rawName.. ".xml"
+        
+        -- Get all files associated with this plugin from our stored mapping
+        local allFiles = {}
+        if hpmVar and hpmVar["pluginFiles"] and hpmVar["pluginFiles"][request_url] then
+            allFiles = hpmVar["pluginFiles"][request_url]
+        else
+            -- Fallback: just the main XML file
+            allFiles = {request_url}
+        end
+        
         hpmVar["cache"][pluginId] = {}
     else
         utilprint("Can't connect to GitHub", "error")
@@ -510,6 +741,7 @@ function raw_get_cache(retval, page, status, headers, full_status, request_url)
         localVersion = localVersion,
         localName = localName,
         url = request_url,
+        allFiles = allFiles,
         purpose = purpose
     }
 end
