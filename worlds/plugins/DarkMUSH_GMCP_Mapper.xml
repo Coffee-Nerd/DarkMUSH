@@ -21,7 +21,7 @@
    purpose="GMCP map builder for DarkMUSH"
    date_written="2010-09-01 16:37:14"
    requires="4.73"
-   version="2.5"
+   version="3.0"
    save_state="y"
    >
 
@@ -4675,29 +4675,16 @@ function findpath(src, dst, noportals, norecalls)
 
    -- Set the max depth
    local max_depth = 150  -- Limit set to 150
-   local visited = { [tostring(src)] = true }
-   if noportals then visited["*"] = true end
-   if norecalls then visited["**"] = true end
-
-   -- Implement a fast queue using head and tail indices
-   local queue = {}
-   local head = 1
-   local tail = 0
-
-   local function enqueue(item)
-       tail = tail + 1
-       queue[tail] = item
-   end
-
-   local function dequeue()
-       local item = queue[head]
-       queue[head] = nil
-       head = head + 1
-       return item
-   end
-
-   enqueue({ uid = src, path = {}, depth = 0 })
-   --local main_status = GetInfo(53):gsub(" %(mapper searching depth %d+%)", "")
+   
+   -- A* implementation
+   local open_set = {}     -- Nodes to be evaluated (priority queue)
+   local closed_set = {}   -- Nodes already evaluated
+   local came_from = {}    -- Optimal path predecessor map
+   local g_score = {}      -- Cost from start to node
+   local f_score = {}      -- g_score + heuristic cost to goal
+   
+   if noportals then closed_set["*"] = true end
+   if norecalls then closed_set["**"] = true end
 
    -- Cache exits in memory (only query the DB once!)
    if not global_exits_cache then
@@ -4710,36 +4697,130 @@ function findpath(src, dst, noportals, norecalls)
            table.insert(global_exits_cache[row.fromuid], { touid = row.touid, dir = row.dir })
        end
    end
+   
+   -- Load destination room for heuristic calculation
+   if not rooms[dst] then
+       rooms[dst] = load_room_from_database(dst)
+   end
 
-   -- BFS search loop using our fast queue
-   while head <= tail do
-       local current = dequeue()
+   -- Heuristic function (Manhattan distance using room coordinates if available)
+   local function heuristic(from_uid, to_uid)
+       local from_room = rooms[from_uid]
+       local to_room = rooms[to_uid]
+       
+       if from_room and to_room and from_room.x and from_room.y and to_room.x and to_room.y then
+           return math.abs(from_room.x - to_room.x) + math.abs(from_room.y - to_room.y)
+       else
+           -- Fallback: simple estimate based on string comparison
+           return math.abs(tonumber(from_uid) - tonumber(to_uid)) / 1000
+       end
+   end
 
-       if current.uid == dst then
-      --     SetStatus(main_status)
+   -- Priority queue implementation using binary heap
+   local function insert_open_set(uid, f_score_val)
+       local pos = #open_set + 1
+       open_set[pos] = {uid = uid, f_score = f_score_val}
+       
+       -- Bubble up
+       while pos > 1 do
+           local parent = math.floor(pos / 2)
+           if open_set[parent].f_score <= open_set[pos].f_score then
+               break
+           end
+           open_set[pos], open_set[parent] = open_set[parent], open_set[pos]
+           pos = parent
+       end
+   end
+
+   local function extract_min_open_set()
+       if #open_set == 0 then return nil end
+       
+       local min = open_set[1]
+       open_set[1] = open_set[#open_set]
+       open_set[#open_set] = nil
+       
+       -- Bubble down
+       local pos = 1
+       while true do
+           local left = pos * 2
+           local right = pos * 2 + 1
+           local smallest = pos
+           
+           if left <= #open_set and open_set[left].f_score < open_set[smallest].f_score then
+               smallest = left
+           end
+           if right <= #open_set and open_set[right].f_score < open_set[smallest].f_score then
+               smallest = right
+           end
+           
+           if smallest == pos then break end
+           
+           open_set[pos], open_set[smallest] = open_set[smallest], open_set[pos]
+           pos = smallest
+       end
+       
+       return min.uid
+   end
+
+   -- Initialize starting node
+   g_score[src] = 0
+   f_score[src] = heuristic(src, dst)
+   insert_open_set(src, f_score[src])
+
+   -- A* search loop
+   while #open_set > 0 do
+       local current = extract_min_open_set()
+       
+       if current == dst then
+           -- Reconstruct path
+           local path = {}
+           local node = dst
+           while came_from[node] do
+               table.insert(path, 1, came_from[node])
+               node = came_from[node].prev_uid
+           end
+           
            BroadcastPlugin(502, "found_paths = " ..
-               string.gsub(serialize.save_simple(current.path), "%s+", " "))
-           return current.path, current.depth
+               string.gsub(serialize.save_simple(path), "%s+", " "))
+           return path, #path
        end
 
-       -- Expand search if within depth limits
-       if current.depth < max_depth and global_exits_cache[current.uid] then
-           for _, connection in ipairs(global_exits_cache[current.uid]) do
-               if not visited[connection.touid] then
-                   visited[connection.touid] = true
-                   -- Copy current path efficiently using table.unpack
-                   local new_path = {}
-                   for i = 1, #current.path do
-                       new_path[i] = current.path[i]
+       closed_set[current] = true
+
+       -- Expand current node if within depth limits
+       if g_score[current] < max_depth and global_exits_cache[current] then
+           for _, connection in ipairs(global_exits_cache[current]) do
+               local neighbor = connection.touid
+               
+               if not closed_set[neighbor] then
+                   local tentative_g_score = g_score[current] + 1
+                   
+                   if not g_score[neighbor] or tentative_g_score < g_score[neighbor] then
+                       -- This path to neighbor is better than any previous one
+                       came_from[neighbor] = {dir = connection.dir, uid = neighbor, prev_uid = current}
+                       g_score[neighbor] = tentative_g_score
+                       f_score[neighbor] = tentative_g_score + heuristic(neighbor, dst)
+                       
+                       -- Add to open set if not already there
+                       local in_open_set = false
+                       for i = 1, #open_set do
+                           if open_set[i].uid == neighbor then
+                               in_open_set = true
+                               -- Update f_score in open_set
+                               open_set[i].f_score = f_score[neighbor]
+                               break
+                           end
+                       end
+                       
+                       if not in_open_set then
+                           insert_open_set(neighbor, f_score[neighbor])
+                       end
                    end
-                   table.insert(new_path, { dir = connection.dir, uid = connection.touid })
-                   enqueue({ uid = connection.touid, path = new_path, depth = current.depth + 1 })
                end
            end
        end
    end
 
-  -- SetStatus(main_status)
    return nil  -- No path found
 end
 
