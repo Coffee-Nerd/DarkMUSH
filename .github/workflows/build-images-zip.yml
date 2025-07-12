@@ -1,0 +1,36 @@
+name: Build Images ZIP
+
+on:
+  push:
+    paths:
+      - 'worlds/plugins/images/**'
+  workflow_dispatch:
+
+jobs:
+  build-images-zip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create images ZIP
+        run: |
+          cd worlds/plugins
+          zip -r images.zip images/
+          
+      - name: Upload images.zip as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: images-zip
+          path: worlds/plugins/images.zip
+          
+      - name: Create or update release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: images-latest
+          name: "Latest Images"
+          body: "Auto-generated ZIP of worlds/plugins/images directory"
+          files: worlds/plugins/images.zip
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
