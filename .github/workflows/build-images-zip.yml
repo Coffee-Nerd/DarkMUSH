@@ -6,12 +6,17 @@ on:
       - 'worlds/plugins/images/**'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  
 jobs:
   build-images-zip:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create images ZIP
         run: |
@@ -23,14 +28,13 @@ jobs:
         with:
           name: images-zip
           path: worlds/plugins/images.zip
+          retention-days: 90
           
-      - name: Create or update release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: images-latest
-          name: "Latest Images"
-          body: "Auto-generated ZIP of worlds/plugins/images directory"
-          files: worlds/plugins/images.zip
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit and push images.zip to repository
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          cp worlds/plugins/images.zip .
+          git add images.zip
+          git commit -m "Auto-update images.zip [skip ci]" || exit 0
+          git push
