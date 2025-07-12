@@ -59,7 +59,7 @@ Room info should include:
 
 module (..., package.seeall)
 
-VERSION = 2.8   -- for querying by plugins
+VERSION = 3.0   -- for querying by plugins
 require "aard_register_z_on_create"
 
 require "mw_theme_base"
@@ -79,7 +79,7 @@ local CONFIG_FONT_ID_UL = "cfnu"
 local ROOM_SIZE = tonumber(GetVariable("ROOM_SIZE")) or 12
 
 -- how far away to draw rooms from each other
-local DISTANCE_TO_NEXT_ROOM = tonumber(GetVariable("DISTANCE_TO_NEXT_ROOM")) or 8 --CURRENTLY SET TO 24
+local DISTANCE_TO_NEXT_ROOM = 0--24 --tonumber(GetVariable("DISTANCE_TO_NEXT_ROOM")) or 8 --CURRENTLY SET TO 24
 -- supplied in init
 local supplied_get_room
 local room_click
@@ -98,6 +98,48 @@ local last_result_list = {}
 -- other locals
 local HALF_ROOM, connectors, half_connectors, arrows
 local plan_to_draw, drawn, drawn_coords
+
+-- Function to draw scaled transparent images
+function draw_scaled_image_alpha(target_win, image_path, image_id, x, y, size, alpha, original_size)
+   original_size = original_size or 32  -- default assumption
+   alpha = alpha or 1
+   
+   local unique_id = image_id .. "_" .. tostring(x) .. "_" .. tostring(y)
+   local hidden_win = "hidden_" .. unique_id
+   local alpha_mask_win = "alpha_" .. unique_id  
+   local alpha_stretched_win = "alpha_str_" .. unique_id
+   
+   -- Step 1: Create stretched image
+   WindowCreate(hidden_win, 0, 0, size, size, 6, 0, 0)
+   WindowLoadImage(hidden_win, image_id, image_path)
+   WindowDrawImage(hidden_win, image_id, 0, 0, size, size, miniwin.image_stretch)
+   
+   -- Step 2: Create alpha mask from original
+   WindowCreate(alpha_mask_win, 0, 0, original_size, original_size, 6, 0, 0)
+   WindowLoadImage(alpha_mask_win, image_id, image_path)
+   WindowGetImageAlpha(alpha_mask_win, image_id, 0, 0, original_size, original_size, 0, 0)
+   
+   -- Step 3: Stretch the alpha mask
+   WindowCreate(alpha_stretched_win, 0, 0, size, size, 6, 0, 0)
+   WindowImageFromWindow(alpha_stretched_win, "alpha_mask", alpha_mask_win)
+   WindowDrawImage(alpha_stretched_win, "alpha_mask", 0, 0, size, size, miniwin.image_stretch)
+   
+   -- Step 4: Import and merge
+   WindowImageFromWindow(target_win, unique_id .. "_img", hidden_win)
+   WindowImageFromWindow(target_win, unique_id .. "_alpha", alpha_stretched_win)
+   
+   local left = x - size / 2
+   local top = y - size / 2
+   local right = x + size / 2
+   local bottom = y + size / 2
+   
+   WindowMergeImageAlpha(target_win, unique_id .. "_img", unique_id .. "_alpha", left, top, right, bottom, 0, alpha, 0, 0, 0, 0)
+   
+   -- Clean up
+   WindowDelete(hidden_win)
+   WindowDelete(alpha_mask_win)
+   WindowDelete(alpha_stretched_win)
+end
 local last_drawn, depth, font_height
 local walk_to_room_name
 local total_times_drawn = 0
@@ -172,24 +214,24 @@ local function build_room_info ()
 end -- build_room_info
 
 -- assorted colours
-BACKGROUND_COLOUR             = { name = "Area Background",  colour =  ColourNameToRGB "#111111"}
-ROOM_COLOUR                   = { name = "Room",             colour =  ColourNameToRGB "#dcdcdc"}
-EXIT_COLOUR                   = { name = "Exit",             colour =  ColourNameToRGB "#e0ffff"}
-EXIT_COLOUR_UP_DOWN           = { name = "Exit up/down",     colour =  ColourNameToRGB "#ffb6c1"}
-ROOM_NOTE_COLOUR              = { name = "Room notes",       colour =  ColourNameToRGB "lightgreen"}
-OUR_ROOM_COLOUR               = { name = "Our Room Colour",  colour =  tonumber(GetPluginVariable("b6eae87ccedd84f510b74714", "OUR_ROOM_COLOUR")) or 0xFF }
-WAYPOINT_FILL_COLOUR          = { name = "waypoint",         colour =  ColourNameToRGB "lime"}
-UNKNOWN_ROOM_COLOUR           = { name = "Unknown room",     colour =  ColourNameToRGB "#9b0000"}
-DIFFERENT_AREA_COLOUR         = { name = "Another area",     colour =  ColourNameToRGB "#ff0000"}
-PK_BORDER_COLOUR              = { name = "PK border",        colour =  ColourNameToRGB "red"}
-SHOP_FILL_COLOUR              = { name = "Shop",             colour =  ColourNameToRGB "#ffad2f"}
-REGULAR_FILL_COLOUR           = { name = "Regular",          colour =  ColourNameToRGB "white"}
-HEALER_FILL_COLOUR            = { name = "Healer",           colour =  ColourNameToRGB "#9acd32"}
-TRAINER_FILL_COLOUR           = { name = "Trainer",          colour =  ColourNameToRGB "#9acd32"}
-QUESTOR_FILL_COLOUR           = { name = "Questor",          colour =  ColourNameToRGB "deepskyblue"}
-BANK_FILL_COLOUR              = { name = "Bank",             colour =  ColourNameToRGB "#ffD700"}
-FORGE_FILL_COLOUR             = { name = "Forge",            colour =  ColourNameToRGB "darkorange"}
-GUILD_FILL_COLOUR             = { name = "Guild",            colour =  ColourNameToRGB "magenta"}
+BACKGROUND_COLOUR     = { name = "Area Background",  colour =  ColourNameToRGB "#111111"}
+ROOM_COLOUR           = { name = "Room",             colour =  ColourNameToRGB "#dcdcdc"}
+EXIT_COLOUR           = { name = "Exit",             colour =  ColourNameToRGB "#e0ffff"}
+EXIT_COLOUR_UP_DOWN   = { name = "Exit up/down",     colour =  ColourNameToRGB "#ffb6c1"}
+ROOM_NOTE_COLOUR      = { name = "Room notes",       colour =  ColourNameToRGB "lightgreen"}
+OUR_ROOM_COLOUR       = { name = "Our Room Colour",  colour =  tonumber(GetPluginVariable("b6eae87ccedd84f510b74714", "OUR_ROOM_COLOUR")) or 0xFF }
+WAYPOINT_FILL_COLOUR  = { name = "waypoint",         colour =  ColourNameToRGB "lime"}
+UNKNOWN_ROOM_COLOUR   = { name = "Unknown room",     colour =  ColourNameToRGB "#9b0000"}
+DIFFERENT_AREA_COLOUR = { name = "Another area",     colour =  ColourNameToRGB "#ff0000"}
+PK_BORDER_COLOUR      = { name = "PK border",        colour =  ColourNameToRGB "red"}
+SHOP_FILL_COLOUR      = { name = "Shop",             colour =  ColourNameToRGB "#ffad2f"}
+REGULAR_FILL_COLOUR   = { name = "Regular",          colour =  ColourNameToRGB "white"}
+FORGE_FILL_COLOUR     = { name = "Forge",            colour =  ColourNameToRGB "darkorange"}
+HEALER_FILL_COLOUR    = { name = "Healer",           colour =  ColourNameToRGB "#9acd32"}
+TRAINER_FILL_COLOUR   = { name = "Trainer",          colour =  ColourNameToRGB "#9acd32"}
+QUESTOR_FILL_COLOUR   = { name = "Questor",          colour =  ColourNameToRGB "deepskyblue"}
+BANK_FILL_COLOUR      = { name = "Bank",             colour =  ColourNameToRGB "#ffD700"}
+GUILD_FILL_COLOUR     = { name = "Guild",            colour =  ColourNameToRGB "magenta"}
 MAGE_TRAINER_FILL_COLOUR      = { name = "Mage Trainer",     colour =  ColourNameToRGB "slategray"}
 CLERIC_TRAINER_FILL_COLOUR    = { name = "Cleric Trainer",   colour =  ColourNameToRGB "cyan"}
 THIEF_TRAINER_FILL_COLOUR     = { name = "Thief Trainer",    colour =  ColourNameToRGB "purple"}
@@ -198,16 +240,16 @@ NECRO_TRAINER_FILL_COLOUR     = { name = "Necro Trainer",    colour =  ColourNam
 DRUID_TRAINER_FILL_COLOUR     = { name = "Druid Trainer",    colour =  ColourNameToRGB "green"}
 RANGER_TRAINER_FILL_COLOUR    = { name = "Ranger Trainer",   colour =  ColourNameToRGB "yellow"}
 MISC_TRAINER_FILL_COLOUR      = { name = "Priest",           colour =  ColourNameToRGB "white"}
-SAFEROOM_FILL_COLOUR          = { name = "Safe room",        colour =  ColourNameToRGB "lightblue"}
-MAPPER_NOTE_COLOUR            = { name = "Messages",         colour =  ColourNameToRGB "lightgreen"}
+SAFEROOM_FILL_COLOUR  = { name = "Safe room",        colour =  ColourNameToRGB "lightblue"}
+MAPPER_NOTE_COLOUR    = { name = "Messages",         colour =  ColourNameToRGB "lightgreen"}
 
-ROOM_NAME_TEXT                = { name = "Room name text",   colour = ColourNameToRGB "#BEF3F1"}
-ROOM_NAME_FILL                = { name = "Room name fill",   colour = ColourNameToRGB "#105653"}
-ROOM_NAME_BORDER              = { name = "Room name box",    colour = ColourNameToRGB "black"}
+ROOM_NAME_TEXT        = { name = "Room name text",   colour = ColourNameToRGB "#BEF3F1"}
+ROOM_NAME_FILL        = { name = "Room name fill",   colour = ColourNameToRGB "#105653"}
+ROOM_NAME_BORDER      = { name = "Room name box",    colour = ColourNameToRGB "black"}
 
-AREA_NAME_TEXT                = { name = "Area name text",   colour = ColourNameToRGB "#BEF3F1"}
-AREA_NAME_FILL                = { name = "Area name fill",   colour = ColourNameToRGB "#105653"}
-AREA_NAME_BORDER              = { name = "Area name box",    colour = ColourNameToRGB "black"}
+AREA_NAME_TEXT        = { name = "Area name text",   colour = ColourNameToRGB "#BEF3F1"}
+AREA_NAME_FILL        = { name = "Area name fill",   colour = ColourNameToRGB "#105653"}
+AREA_NAME_BORDER      = { name = "Area name box",    colour = ColourNameToRGB "black"}
 
 -- how many seconds to show "recent visit" lines (default 3 minutes)
 LAST_VISIT_TIME = 60 * 3
@@ -529,206 +571,378 @@ local function add_another_room (uid, path, x, y)
    return {uid=uid, path=path, x = x, y = y}
 end  -- add_another_room
 
-local function draw_room(uid, path, x, y)
+-- Cache for tile images
+local tile_images = {}
 
+-- Helper function to get a tile variation based on variation_num
+local function get_tile_variation(base_tile_name, variation_num)
+   local dir = GetInfo(66) .. "worlds\\plugins\\images\\"
+   local variation_name = string.format("%s_%03d.png", base_tile_name, variation_num)
+   local base_variation = base_tile_name .. ".png"
+
+   -- Attempt to load the specific variation
+   if tile_images[variation_name] == nil then
+       local imgpath = dir .. variation_name
+       if WindowLoadImage(win, variation_name, imgpath) == 0 then
+           tile_images[variation_name] = variation_name -- Cache the valid image
+       else
+           tile_images[variation_name] = false -- Cache as not found
+       end
+   end
+
+   if tile_images[variation_name] then
+       return tile_images[variation_name]
+   else
+       -- Fallback to base tile if specific variation is not found
+       if tile_images[base_variation] == nil then
+           local base_imgpath = dir .. base_variation
+           if WindowLoadImage(win, base_variation, base_imgpath) == 0 then
+               tile_images[base_variation] = base_variation -- Cache the valid image
+           else
+               tile_images[base_variation] = false -- Cache as not found
+           end
+       end
+
+       if tile_images[base_variation] then
+           return tile_images[base_variation]
+       else
+           return nil -- Optionally, return a default image or handle the missing base tile
+       end
+   end
+end
+
+
+function draw_room(uid, path, x, y)
    local coords = string.format("%i,%i", math.floor(x), math.floor(y))
+   drawn_coords[coords] = uid
 
-   -- need this for the *current* room !!!
-   drawn_coords[coords] = uid 
-
-   -- don't draw the same room more than once
-   if drawn[uid] then return end
+   -- If we already drew this room, skip
+   if drawn[uid] then
+      return
+   end
    drawn[uid] = { coords = coords, path = path }
 
-   -- get room data
    local room = rooms[uid] or get_room(uid)
    rooms[uid] = room
 
-   local left, top, right, bottom = x - HALF_ROOM, y - HALF_ROOM, x + HALF_ROOM, y + HALF_ROOM
+   local left   = x - HALF_ROOM
+   local top    = y - HALF_ROOM
+   local right  = x + HALF_ROOM
+   local bottom = y + HALF_ROOM
 
-   -- skip drawing if room is off screen
-   if (x < HALF_ROOM) or (y < (title_bottom or font_height) + HALF_ROOM) or
-      (x > config.WINDOW.width - HALF_ROOM) or (y > config.WINDOW.height - HALF_ROOM) then
-       return
+   -- Off-screen check
+   if (x < HALF_ROOM)
+      or (y < (title_bottom or font_height) + HALF_ROOM)
+      or (x > config.WINDOW.width - HALF_ROOM)
+      or (y > config.WINDOW.height - HALF_ROOM)
+   then
+      return
    end
 
-   -- exits
+   ----------------------------------------------------------------------------
+   -- Gather connector lines for later
+   ----------------------------------------------------------------------------
+   local lines_to_draw  = {}
+   local arrows_to_draw = {}
+
    for dir, exit_uid in pairs(room.exits) do
-       local exit_info = connectors[dir]
-       local stub_exit_info = half_connectors[dir]
-       local locked_exit = not (room.exit_locks == nil or room.exit_locks[dir] == nil or room.exit_locks[dir] == "0")
-       local exit_line_colour = (locked_exit and 0x0000FF) or EXIT_COLOUR.colour
-       local arrow = arrows[dir]
+      -- For non-up/down exits, honor the show_up_down flag.
+      if (dir == "u" or dir == "d") and not show_up_down then
+         -- We do NOT queue neighbor rooms or connector lines for up/down exits when disabled,
+         -- but we still want to draw the arrow later.
+         if false then goto continue end
+      end
 
-       if dir == "u" or dir == "d" then
-           exit_line_colour = (locked_exit and 0x0000FF) or EXIT_COLOUR_UP_DOWN.colour
-       end
+      local exit_info      = connectors[dir]
+      local stub_exit_info = half_connectors[dir]
+      local locked_exit    = false
+      local arrow          = arrows[dir]
+      local exit_color     = EXIT_COLOUR.colour  -- Default color for exits
 
-       if exit_info then
-           local linetype = miniwin.pen_solid
-           local linewidth = (locked_exit and 2) or 1
+      -- Special color for up/down exits
+      if dir == "u" or dir == "d" then
+         exit_color = EXIT_COLOUR_UP_DOWN.colour
+      end
 
-           -- cache exit room
-           if not rooms[exit_uid] then
-               rooms[exit_uid] = get_room(exit_uid)
-           end
+      if exit_info then
+         local linetype  = miniwin.pen_solid
+         local linewidth = locked_exit and 2 or 1
 
-           if rooms[exit_uid].unknown then
-               linetype = miniwin.pen_dot
-           end
+         if not rooms[exit_uid] then
+            rooms[exit_uid] = get_room(exit_uid)
+         end
 
-           local next_x = x + exit_info.at[1] * (ROOM_SIZE + DISTANCE_TO_NEXT_ROOM)
-           local next_y = y + exit_info.at[2] * (ROOM_SIZE + DISTANCE_TO_NEXT_ROOM)
+         if rooms[exit_uid].unknown then
+            linetype = miniwin.pen_dot
+         end
 
-           local next_coords = string.format("%i,%i", math.floor(next_x), math.floor(next_y))
+         local next_x = x + exit_info.at[1] * (ROOM_SIZE + DISTANCE_TO_NEXT_ROOM)
+         local next_y = y + exit_info.at[2] * (ROOM_SIZE + DISTANCE_TO_NEXT_ROOM)
 
-           -- zone exit logic
-           if config.SHOW_AREA_EXITS and room.area ~= rooms[exit_uid].area and not rooms[exit_uid].unknown then
-               area_exits[rooms[exit_uid].area] = area_exits[rooms[exit_uid].area] or {x = x, y = y, def = barriers[dir]}
-           end
+         -- Add vertical offset for up/down exits when drawing
+         if dir == "u" then
+            next_y = next_y - (ROOM_SIZE * 2)
+         elseif dir == "d" then
+            next_y = next_y + (ROOM_SIZE * 2)
+         end
 
-           -- handle case where another room is already at this location
-           if drawn_coords[next_coords] and drawn_coords[next_coords] ~= exit_uid then
-               exit_info = stub_exit_info
-           elseif exit_uid == uid then
-               exit_info = stub_exit_info
-               linetype = miniwin.pen_dash
-           else
-               if (not show_other_areas and rooms[exit_uid].area ~= current_area and not rooms[exit_uid].unknown) or
-                  (not show_up_down and (dir == "u" or dir == "d")) then
-                   exit_info = stub_exit_info
-               else
-                   if plan_to_draw[exit_uid] and plan_to_draw[exit_uid] ~= next_coords then
-                       exit_info = stub_exit_info
-                       linetype = miniwin.pen_dash
-                   else
-                       -- remember to draw the room in the next iteration
-                       local new_path = copytable.deep(path)
-                       table.insert(new_path, { dir = dir, uid = exit_uid })
-                       table.insert(rooms_to_be_drawn, add_another_room(exit_uid, new_path, next_x, next_y))
-                       drawn_coords[next_coords] = exit_uid
-                       plan_to_draw[exit_uid] = next_coords
+         local next_coords = string.format("%i,%i", math.floor(next_x), math.floor(next_y))
 
-                       if not rooms[exit_uid].unknown then
-                           local exit_time = last_visited[exit_uid] or 0
-                           local this_time = last_visited[uid] or 0
-                           local now = os.time()
-                           if exit_time > (now - LAST_VISIT_TIME) and this_time > (now - LAST_VISIT_TIME) then
-                               linewidth = 2
-                           end
-                       end
-                   end
-               end
-           end
+         if drawn_coords[next_coords] and drawn_coords[next_coords] ~= exit_uid then
+            exit_info = stub_exit_info
+         elseif exit_uid == uid then
+            exit_info = stub_exit_info
+            linetype  = miniwin.pen_dash
+         else
+            -- Only queue neighbor rooms if show_up_down is true or if not an up/down exit.
+            if not ((dir == "u" or dir == "d") and not show_up_down) then
+               local new_path = copytable.deep(path)
+               table.insert(new_path, {dir = dir, uid = exit_uid})
+               table.insert(rooms_to_be_drawn, {uid = exit_uid, path = new_path, x = next_x, y = next_y})
+               drawn_coords[next_coords] = exit_uid
+               plan_to_draw[exit_uid] = next_coords
+            end
+         end
 
-           -- draw exit line
-           WindowLine(win, x + exit_info.x1, y + exit_info.y1, x + exit_info.x2, y + exit_info.y2, exit_line_colour, linetype + 0x0200, linewidth)
+         -- For non-up/down exits, add the connector line (or if up/down exits are enabled)
+         if (dir ~= "u" and dir ~= "d") or show_up_down then
+            table.insert(lines_to_draw, {
+               x + exit_info.x1, y + exit_info.y1,
+               x + exit_info.x2, y + exit_info.y2,
+               exit_color,
+               linetype + 0x0200, -- smoothing
+               linewidth
+            })
+         end
+      end
 
-           -- handle one-way exit
-           if not rooms[exit_uid].unknown then
-               local dest = rooms[exit_uid]
-               if dest.exits[inverse_direction[dir]] ~= uid then
-                   local points = string.format("%i,%i,%i,%i,%i,%i",
-                       x + arrow[1], y + arrow[2], x + arrow[3], y + arrow[4], x + arrow[5], y + arrow[6])
-
-                   WindowPolygon(win, points, exit_line_colour, miniwin.pen_solid, 1, exit_line_colour, miniwin.brush_solid, true, true)
-               end
-           end
-       end
+      ::continue::
    end
 
-   -- handle terrain drawing if tile_mode is active
-   local tile_mode = GetPluginVariable("b6eae87ccedd84f510b74714", "tile_mode") or "1"
-   local tileName = room.terrain
+   ----------------------------------------------------------------------------
+   -- Draw the tile image/fill UNDER the borders
+   ----------------------------------------------------------------------------
+   if room.unknown then
+      WindowCircleOp(
+          win, miniwin.circle_rectangle,
+          left, top, right, bottom,
+          UNKNOWN_ROOM_COLOUR.colour,
+          miniwin.pen_dot, 1,
+          0, miniwin.brush_hatch_forwards_diagonal
+      )
+   else
+      local tile_mode = GetPluginVariable("b6eae87ccedd84f510b74714", "tile_mode") or "1"
+      local tileName  = room.terrain
+      if tileName and tileName ~= "" and tile_mode == "1" then
+          local variation_num = (uid % 10 == 0) and 10 or (uid % 10)
+          local variation_tile = get_tile_variation(tileName, variation_num)
+          if variation_tile then
+              WindowDrawImage(win, variation_tile, left, top, right, bottom, miniwin.image_stretch)
+          end
+      else
+          WindowCircleOp(
+              win, miniwin.circle_rectangle,
+              left, top, right, bottom,
+              0, miniwin.pen_null, 0,
+              room.fillcolour, room.fillbrush
+          )
+      end
+  end
 
-   if room.terrain and room.terrain ~= "" and tile_mode == "1" then
-       WindowDrawImage(win, tileName, left, top, right, bottom, miniwin.image_stretch)
+   if room.notes and room.notes ~= "" then
+      local highlight_width = 3
+      WindowCircleOp(
+          win, miniwin.circle_rectangle,
+          left + highlight_width, top + highlight_width,
+          right - highlight_width, bottom - highlight_width,
+          ROOM_NOTE_COLOUR.colour,
+          miniwin.pen_solid, highlight_width,
+          -1, miniwin.brush_null
+      )
    end
 
-   -- handle special rooms like guilds, shops, etc.
+   ----------------------------------------------------------------------------
+   -- Handle special rooms: shops, guild trainers, etc.
+   ----------------------------------------------------------------------------
    local special_room = false
 
    if room.building and room.building ~= "" then
-       -- Mapping of room.building to images and fill colors
        local building_map = {
-           ["waypoint"] = { image = "waypoint", fill = WAYPOINT_FILL_COLOUR.colour },
-           ["weaponshop"] = { image = "weaponshop", fill = REGULAR_FILL_COLOUR.colour },
-           ["armorshop"] = { image = "armorshop", fill = REGULAR_FILL_COLOUR.colour },
-           ["foodshop"] = { image = "foodshop", fill = REGULAR_FILL_COLOUR.colour },
-           ["itemshop"] = { image = "itemshop", fill = REGULAR_FILL_COLOUR.colour },
-           ["petshop"] = { image = "petshop", fill = REGULAR_FILL_COLOUR.colour },
-           ["lightshop"] = { image = "lightshop", fill = REGULAR_FILL_COLOUR.colour },
-           ["forge"] = { image = "forge", fill = FORGE_FILL_COLOUR.colour }
+           ["waypoint"] = { image = "waypoint",       fill = WAYPOINT_FILL_COLOUR.colour },
+           ["weaponshop"] = { image = "weaponshop",   fill = REGULAR_FILL_COLOUR.colour },
+           ["armorshop"] = { image = "armorshop",     fill = REGULAR_FILL_COLOUR.colour },
+           ["foodshop"] = { image = "foodshop",       fill = REGULAR_FILL_COLOUR.colour },
+           ["itemshop"] = { image = "itemshop",       fill = REGULAR_FILL_COLOUR.colour },
+           ["petshop"] = { image = "petshop",         fill = REGULAR_FILL_COLOUR.colour },
+           ["lightshop"] = { image = "lightshop",     fill = REGULAR_FILL_COLOUR.colour },
+           ["forge"] = { image = "forge",             fill = FORGE_FILL_COLOUR.colour },
        }
 
        for building_type, data in pairs(building_map) do
            if string.match(room.building, building_type) then
                special_room = true
-               -- Draw the special room image and border fill
                WindowDrawImage(win, data.image, left, top, right, bottom, miniwin.image_stretch)
-               WindowCircleOp(win, miniwin.circle_rectangle, left - 2 - room.borderpenwidth, top - 2 - room.borderpenwidth,
-                              right + 2 + room.borderpenwidth, bottom + 2 + room.borderpenwidth,
-                              data.fill, room.borderpen, room.borderpenwidth, -1, miniwin.brush_null)
+               WindowCircleOp(
+                   win, miniwin.circle_rectangle,
+                   left - 2 - room.borderpenwidth, top - 2 - room.borderpenwidth,
+                   right + 2 + room.borderpenwidth, bottom + 2 + room.borderpenwidth,
+                   data.fill,
+                   room.borderpen, room.borderpenwidth,
+                   -1, miniwin.brush_null
+               )
                break
            end
        end
    end
 
-   -- handle guilds and bank using room.name
-   if room.name and room.name ~= "" then
+   if not special_room and room.name and room.name ~= "" then
        local name_map = {
-           ["The Warriors Guild"] = { image = "warriortrainer", fill = WARRIOR_TRAINER_FILL_COLOUR.colour },
-           ["The Clerics Guild"] = { image = "clerictrainer", fill = CLERIC_TRAINER_FILL_COLOUR.colour },
-           ["The Mages Guild"] = { image = "magetrainer", fill = MAGE_TRAINER_FILL_COLOUR.colour },
-           ["The Psionicists Guild"] = { image = "necromancertrainer", fill = NECRO_TRAINER_FILL_COLOUR.colour },
-           ["The Thieves Guild"] = { image = "thieftrainer", fill = THIEF_TRAINER_FILL_COLOUR.colour },
-           ["Krynn Bank"] = { image = "bank", fill = BANK_FILL_COLOUR.colour }
+           ["The Warriors Guild"]    = { image = "warriortrainer",      fill = WARRIOR_TRAINER_FILL_COLOUR.colour },
+           ["The Clerics Guild"]     = { image = "clerictrainer",       fill = CLERIC_TRAINER_FILL_COLOUR.colour },
+           ["The Mages Guild"]       = { image = "magetrainer",         fill = MAGE_TRAINER_FILL_COLOUR.colour },
+           ["The Psionicists Guild"] = { image = "necromancertrainer",  fill = NECRO_TRAINER_FILL_COLOUR.colour },
+           ["The Thieves Guild"]     = { image = "thieftrainer",        fill = THIEF_TRAINER_FILL_COLOUR.colour },
+           ["Krynn Bank"]            = { image = "bank",                fill = BANK_FILL_COLOUR.colour },
        }
 
        for name_type, data in pairs(name_map) do
            if string.match(room.name, name_type) then
                special_room = true
-               -- Draw the special room image and border fill
                WindowDrawImage(win, data.image, left, top, right, bottom, miniwin.image_stretch)
-               WindowCircleOp(win, miniwin.circle_rectangle, left - 2 - room.borderpenwidth, top - 2 - room.borderpenwidth,
-                              right + 2 + room.borderpenwidth, bottom + 2 + room.borderpenwidth,
-                              data.fill, room.borderpen, room.borderpenwidth, -1, miniwin.brush_null)
                break
            end
        end
    end
-   
 
-   -- Handle unexplored rooms
-   if room.unknown then
-      WindowCircleOp(win, miniwin.circle_rectangle, left, top, right, bottom,
-          UNKNOWN_ROOM_COLOUR.colour, miniwin.pen_dot, 1,
-          0, miniwin.brush_hatch_forwards_diagonal)
+   ----------------------------------------------------------------------------
+   -- Draw the tile borders AFTER images, with bright yellow, skipping sides w/ exits
+   ----------------------------------------------------------------------------
+   local neighbor_offset = {
+      n = {0, -(ROOM_SIZE + DISTANCE_TO_NEXT_ROOM)},
+      s = {0,  (ROOM_SIZE + DISTANCE_TO_NEXT_ROOM)},
+      e = {(ROOM_SIZE + DISTANCE_TO_NEXT_ROOM),  0},
+      w = {-(ROOM_SIZE + DISTANCE_TO_NEXT_ROOM), 0},
+   }
 
-  -- Handle rooms with notes
-  elseif room.notes ~= nil and room.notes ~= "" then
-      WindowCircleOp(win, miniwin.circle_rectangle, left - 1 - room.borderpenwidth, top - 1 - room.borderpenwidth,
-          right + 1 + room.borderpenwidth, bottom + 1 + room.borderpenwidth, ROOM_NOTE_COLOUR.colour,
-          room.borderpen, room.borderpenwidth, -1, miniwin.brush_null)
+   local border_color = ColourNameToRGB("white")
+   local border_pen   = miniwin.pen_solid
+   local border_width = 3
 
-  -- Draw regular rooms if no special room was drawn and it's not the current room
-  elseif not special_room and uid ~= current_room then
-      -- Draw the regular room without a border, only apply fill if necessary
-      WindowCircleOp(win, miniwin.circle_rectangle, left, top, right, bottom, room.fillcolour, miniwin.pen_null, 0, -1, miniwin.brush_null)
-  end
+   for dir, coords in pairs(barriers) do
+      if (dir == "n" or dir == "s" or dir == "e" or dir == "w") then
+         if not room.exits[dir] then
+            local nx = x + neighbor_offset[dir][1]
+            local ny = y + neighbor_offset[dir][2]
+            local neighbor_coords = string.format("%i,%i", math.floor(nx), math.floor(ny))
+            local neighbor_uid = drawn_coords[neighbor_coords]
+            if neighbor_uid then
+               local neighbor_room = rooms[neighbor_uid]
+               if neighbor_room and neighbor_room.exits[inverse_direction[dir]] == uid then
+                  goto skip_border
+               end
+            end
 
+            WindowLine(
+               win,
+               x + coords.x1, y + coords.y1,
+               x + coords.x2, y + coords.y2,
+               border_color,
+               border_pen,
+               border_width
+            )
 
-   -- highlight the current room
-   if uid == current_room then
-       WindowCircleOp(win, miniwin.circle_rectangle, left - 2 - room.borderpenwidth, top - 2 - room.borderpenwidth,
-                      right + 2 + room.borderpenwidth, bottom + 2 + room.borderpenwidth,
-                      OUR_ROOM_COLOUR.colour, room.borderpen, room.borderpenwidth, -2, miniwin.brush_null)
+            ::skip_border::
+         end
+      end
    end
 
-   -- Add mouse interactions
-   WindowAddHotspot(win, uid, left, top, right, bottom, "", "", "", "", "mapper.mouseup_room", room.hovermessage, miniwin.cursor_hand, 0)
+   ----------------------------------------------------------------------------
+   -- Draw all connector lines & arrows last (on top)
+   ----------------------------------------------------------------------------
+   for _, ln in ipairs(lines_to_draw) do
+      local x1, y1, x2, y2, color, penstyle, width = unpack(ln)
+      WindowLine(win, x1, y1, x2, y2, color, penstyle, width)
+   end
+
+   -- Draw arrows from the earlier loop
+   for _, arr in ipairs(arrows_to_draw) do
+      local ax1, ay1, ax2, ay2, ax3, ay3, color = unpack(arr)
+      local points = string.format("%i,%i,%i,%i,%i,%i", ax1, ay1, ax2, ay2, ax3, ay3)
+      WindowPolygon(win, points,
+         color, miniwin.pen_solid, 1,
+         color, miniwin.brush_solid,
+         true, true)
+   end
+
+   ----------------------------------------------------------------------------
+   -- Highlight current room (draw on top of everything)
+   ----------------------------------------------------------------------------
+   if uid == current_room then
+      local char_alpha = 1
+      if room.exits["u"] or room.exits["d"] then
+         char_alpha = 0.7  -- make it slightly transparent if an up/down exit exists
+      end
+      draw_scaled_image_alpha(win, GetInfo(66) .. "worlds\\plugins\\images\\character.png", "character", x, y, ROOM_SIZE, char_alpha, 32)
+   end
+
+   ----------------------------------------------------------------------------
+   -- Mouse hotspot
+   ----------------------------------------------------------------------------
+   WindowAddHotspot(
+      win, uid,
+      left, top, right, bottom,
+      "", "", "", "",
+      "mapper.mouseup_room",
+      room.hovermessage,
+      miniwin.cursor_hand, 0
+   )
    WindowScrollwheelHandler(win, uid, "mapper.zoom_map")
+   
+   ----------------------------------------------------------------------------
+   -- Always draw up/down arrows (even if neighbor processing was skipped)
+   ----------------------------------------------------------------------------
+   for dir, exit_uid in pairs(room.exits) do
+      if dir == "u" or dir == "d" then
+         -- Use smaller multipliers so the arrow is not huge.
+         local base_offset = ROOM_SIZE * 0.35      -- inset from the tile edge
+         local half_base   = ROOM_SIZE * 0.2      -- half the base width (~40% of ROOM_SIZE total)
+         local height      = (ROOM_SIZE * 0.3) * 0.866  -- equilateral triangle height
+         local arrow = {}
+         if dir == "u" then
+            arrow = { -half_base, -HALF_ROOM + base_offset,
+                      half_base,  -HALF_ROOM + base_offset,
+                      0,          -HALF_ROOM + base_offset - height }
+         else
+            arrow = { -half_base, HALF_ROOM - base_offset,
+                      half_base,  HALF_ROOM - base_offset,
+                      0,          HALF_ROOM - base_offset + height }
+         end
+         local arrow_color = (dir == "u" and ColourNameToRGB("magenta")) or (dir == "d" and ColourNameToRGB("red"))
+         table.insert(arrows_to_draw, {
+            x + arrow[1], y + arrow[2],
+            x + arrow[3], y + arrow[4],
+            x + arrow[5], y + arrow[6],
+            arrow_color
+         })
+         -- Draw the newly added arrow immediately
+         local ax1, ay1, ax2, ay2, ax3, ay3, color = unpack(arrows_to_draw[#arrows_to_draw])
+         local points = string.format("%i,%i,%i,%i,%i,%i", ax1, ay1, ax2, ay2, ax3, ay3)
+         
+         -- Draw subtle dark outline first for up/down arrows
+            WindowPolygon(win, points,
+               0x404040, miniwin.pen_solid, 1,
+               -1, miniwin.brush_null,
+               true, true)
+         
+         -- Draw the main colored arrow on top
+         WindowPolygon(win, points,
+            color, miniwin.pen_null, 0,
+            color, miniwin.brush_solid,
+            true, true)
+      end
+   end
 end
+
 
 
 local function changed_room (uid)
@@ -894,7 +1108,7 @@ local function preload_images()
         "druidtrainer", "clerictrainer", "magetrainer", "necromancertrainer",
         "rangertrainer", "shop", "priest", "alchemyguild", "gato", "moti",
         "weaponshop", "armorshop", "petshop", "itemshop", "foodshop",
-        "lightshop", "inn", "tavern", "dungeon", "crypt", "underground", "underwater", "swim", "forge"
+        "lightshop", "inn", "tavern", "dungeon", "crypt", "underground", "underwater", "swim"
     }
 
     for _, image in ipairs(image_files) do
@@ -977,7 +1191,7 @@ function draw(uid)
        "druidtrainer", "clerictrainer", "magetrainer", "necromancertrainer",
        "rangertrainer", "shop", "priest", "alchemyguild", "gato", "moti",
        "weaponshop", "armorshop", "petshop", "itemshop", "foodshop",
-       "lightshop", "inn", "tavern", "dungeon", "crypt", "underground", "underwater", "swim", "forge"
+       "lightshop", "inn", "tavern", "dungeon", "crypt", "underground", "underwater", "swim"
    }
 
    for _, terrain in ipairs(terrains) do
@@ -1226,7 +1440,7 @@ end
 function zoom_in ()
    if last_drawn and ROOM_SIZE < 40 then
       ROOM_SIZE = ROOM_SIZE + 2
-      DISTANCE_TO_NEXT_ROOM = DISTANCE_TO_NEXT_ROOM + 2
+    --  DISTANCE_TO_NEXT_ROOM = DISTANCE_TO_NEXT_ROOM + 2
       build_room_info ()
       draw (last_drawn)
       SaveState()
@@ -1237,7 +1451,7 @@ end -- zoom_in
 function zoom_out ()
    if last_drawn and ROOM_SIZE > 4 then
       ROOM_SIZE = ROOM_SIZE - 2
-      DISTANCE_TO_NEXT_ROOM = DISTANCE_TO_NEXT_ROOM - 2
+  --    DISTANCE_TO_NEXT_ROOM = DISTANCE_TO_NEXT_ROOM - 2
       build_room_info ()
       draw (last_drawn)
       SaveState()
