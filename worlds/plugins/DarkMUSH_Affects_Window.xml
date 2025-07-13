@@ -12,7 +12,7 @@ language="Lua"
 purpose="Showing affects in a window"
 date_written="2019-07-03 12:04:56"
 requires="5.00"
-  version="3.2"
+  version="3.3"
 >
 
 </plugin>
@@ -181,7 +181,7 @@ requires="5.00"
 	local timer_color = Theme.BODY_TEXT
 	local start_x, start_y = 0, 0
 	local image_size = GetVariable("image_size") or 32 -- the width and height of each image
-	local text_height = 20 -- 	-- How tall each row of text is (for the timers)
+	local text_height = 16 -- 	-- How tall each row of text is (for the timers)
 	local text_margin_top = 2 -- The space between the icon and the text
 	local show_spell_names = GetVariable("show_spell_names") or "true" -- Toggle for showing spell names
 	local spell_name_color = tonumber(GetVariable("spell_name_color")) or ColourNameToRGB("white") -- Color for spell name labels
@@ -513,13 +513,14 @@ requires="5.00"
 							)
 							-- Also clear spell name area above if enabled
 							if show_spell_names == "true" then
+								local spell_name_y = math.max(v.y - text_height, y_off)
 								WindowRectOp(
 									winid,
 									2,
 									v.x,
-									v.y - text_height,
+									spell_name_y,
 									v.x + image_size,
-									v.y,
+									spell_name_y + text_height,
 									ColourNameToRGB("bg_color")
 								)
 							end
@@ -780,6 +781,19 @@ requires="5.00"
 					movieInfo.y + image_size + text_margin_top + text_height,
 					ColourNameToRGB("bg_color")
 				)
+				-- Also clear spell name area above if enabled
+				if show_spell_names == "true" then
+					local spell_name_y = math.max(movieInfo.y - text_height, y_off)
+					WindowRectOp(
+						winid,
+						2,
+						movieInfo.x,
+						spell_name_y +3 ,
+						movieInfo.x + image_size,
+						spell_name_y + text_height,
+						ColourNameToRGB("bg_color")
+					)
+				end
 			else
 				errorCode = error_code.eOK
 				WindowRectOp(
@@ -793,13 +807,14 @@ requires="5.00"
 				)
 				-- Also clear spell name area above if enabled
 				if show_spell_names == "true" then
+					local spell_name_y = math.max(movieInfo.y - text_height, y_off)
 					WindowRectOp(
 						winid,
 						2,
 						movieInfo.x,
-						movieInfo.y - text_height,
+						spell_name_y,
 						movieInfo.x + image_size,
-						movieInfo.y,
+						spell_name_y + text_height,
 						ColourNameToRGB("bg_color")
 					)
 				end
@@ -911,8 +926,8 @@ requires="5.00"
 		
 		-- Now draw spell names AFTER icons have been drawn
 		for i, j in ipairs(infos) do
-			-- Display spell name above icon if enabled (for both enabled and disabled affects)
-			if show_spell_names == "true" then
+			-- Display spell name above icon if enabled (only for enabled affects)
+			if show_spell_names == "true" and infos[i].enabled then
 				-- Get spell name from affect_icons table
 				local display_name = ""
 				
@@ -948,12 +963,14 @@ requires="5.00"
 					-- Draw the spell name above the icon with same margin as timer below
 					-- Timer is at: y + image_size + text_margin_top
 					-- Spell name should be at: y - text_height (removed text_margin_top to bring it closer)
+					-- But don't draw above the window content area
+					local spell_name_y = math.max(infos[i].y - text_height, y_off)
 					WindowText(
 						winid,
 						"font",
 						display_name,
 						name_centered_x,
-						infos[i].y - text_height,
+						spell_name_y,
 						0,
 						0,
 						spell_name_color
