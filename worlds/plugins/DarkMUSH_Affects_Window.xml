@@ -169,8 +169,10 @@ requires="5.00"
 	local last_refresh = 0 -- last window refresh
 	local pos_x = GetVariable("pos_x") or 100
 	local pos_y = GetVariable("pos_y") or 100
-	local font_size = 8
-	local font_name = "Lucida Console"
+	local default_font_size = 8
+	local default_font_name = "Lucida Console"
+	local font_size = tonumber(GetVariable("font_size")) or default_font_size
+	local font_name = GetVariable("font_name") or default_font_name
 	local window_visible = true -- always start out with visible window
 	local title = "Affects Window"
 	local win_height = tonumber(GetVariable("win_height")) or 400
@@ -181,6 +183,8 @@ requires="5.00"
 	local image_size = GetVariable("image_size") or 32 -- the width and height of each image
 	local text_height = 20 -- 	-- How tall each row of text is (for the timers)
 	local text_margin_top = 2 -- The space between the icon and the text
+	local show_spell_names = GetVariable("show_spell_names") or "true" -- Toggle for showing spell names
+	local spell_name_color = tonumber(GetVariable("spell_name_color")) or ColourNameToRGB("white") -- Color for spell name labels
 	
 	-- Global Vars
 	infos = {} -- this table is filled with the info of every gif
@@ -507,6 +511,18 @@ requires="5.00"
 								v.y + image_size + text_margin_top + text_height,
 								ColourNameToRGB("bg_color")
 							)
+							-- Also clear spell name area above if enabled
+							if show_spell_names == "true" then
+								WindowRectOp(
+									winid,
+									2,
+									v.x,
+									v.y - text_height,
+									v.x + image_size,
+									v.y,
+									ColourNameToRGB("bg_color")
+								)
+							end
 						end
 						bad_affect = true
 						DebugNote("BAD AFFECT: ", bad_affect)
@@ -537,6 +553,19 @@ requires="5.00"
 		
 		-- Clear the pending removals queue
 		pending_removals = {}
+		
+		-- Recalculate positions after removals to fill gaps
+		if #infos >= 1 then
+			local tmp_infos = infos
+			infos = {}
+			for i, v in ipairs(tmp_infos) do
+				local x, y = FindNextPos(image_size + 2)
+				v.x = x
+				v.y = y
+				v.needsRedraw = true
+				table.insert(infos, v)
+			end
+		end
 	end
 	
 	-- Safely process all pending additions without interfering with iterations
@@ -762,28 +791,23 @@ requires="5.00"
 					movieInfo.y + image_size + text_margin_top + text_height,
 					ColourNameToRGB("bg_color")
 				)
+				-- Also clear spell name area above if enabled
+				if show_spell_names == "true" then
+					WindowRectOp(
+						winid,
+						2,
+						movieInfo.x,
+						movieInfo.y - text_height,
+						movieInfo.x + image_size,
+						movieInfo.y,
+						ColourNameToRGB("bg_color")
+					)
+				end
 				-- Now set the down_image to nothing, so it can draw the next one.
 				image_down = 0
 			end
 		end
 		--long WindowDrawImage(BSTR WindowName, BSTR ImageId, long Left, long Top, long Right, long Bottom, short Mode, long SrcLeft, long SrcTop, long SrcRight, long SrcBottom);
-	
-		-- Redraw icons
-		if (#infos >= 1) then
-			tmp_infos = infos
-			infos = {}
-			warned = false
-			for i, v in ipairs(tmp_infos) do
-				x, y = FindNextPos(image_size + 2)
-				v.x = x
-				v.y = y
-				if (not warned and (x > win_width or y > win_height)) then
-					warned = true
-					Note("Your Affects window is too small to show all the icons, make it bigger!")
-				end
-				table.insert(infos, v)
-			end
-		end
 	
 		if errorCode ~= error_code.eOK then
 			ErrorNote("Could not draw image: " .. filename)
@@ -821,7 +845,7 @@ requires="5.00"
 	
 				local timer_color
 				if spell_timer == -1 then
-					spell_timer = "PERMA"
+					spell_timer = "PERM"
 					timer_color = ColourNameToRGB("fuchsia")
 				elseif spell_timer >= 30 then
 					timer_color = ColourNameToRGB("lime")
@@ -884,6 +908,60 @@ requires="5.00"
 	
 			v.lastDrawState = v.enabled
 		end
+		
+		-- Now draw spell names AFTER icons have been drawn
+		for i, j in ipairs(infos) do
+			-- Display spell name above icon if enabled (for both enabled and disabled affects)
+			if show_spell_names == "true" then
+				-- Get spell name from affect_icons table
+				local display_name = ""
+				
+				-- Find which spell this is by checking the filename against affect_icons values
+				for spell_id, icon_name in pairs(affect_icons) do
+					-- Check if this filename contains this icon name
+					if infos[i].filename:find(icon_name) then
+						-- Found it! Use the icon name as display name
+						display_name = icon_name:gsub("_", " ")
+						
+						-- Truncate name based on icon size
+						if image_size == 32 then
+							-- 32x32 mode: show only 4 characters
+							if #display_name > 4 then
+								display_name = display_name:sub(1, 4)
+							end
+						else
+							-- 64x64 mode: show up to 8 characters
+							if #display_name > 8 then
+								display_name = display_name:sub(1, 8)
+							end
+						end
+						break
+					end
+				end
+				
+				-- Only draw if we have a valid display name
+				if display_name ~= "" then
+					-- Calculate centered position for spell name
+					local nameWidth = WindowTextWidth(winid, "font", display_name)
+					local name_centered_x = infos[i].x + (image_size - nameWidth) / 2
+					
+					-- Draw the spell name above the icon with same margin as timer below
+					-- Timer is at: y + image_size + text_margin_top
+					-- Spell name should be at: y - text_height (removed text_margin_top to bring it closer)
+					WindowText(
+						winid,
+						"font",
+						display_name,
+						name_centered_x,
+						infos[i].y - text_height,
+						0,
+						0,
+						spell_name_color
+					)
+				end
+			end
+		end
+		
 	-- Process any pending additions and removals at the end of the timer cycle
 	ProcessPendingAdditions()
 	ProcessPendingRemovals()
@@ -997,12 +1075,23 @@ end -- PlayAllMovieFrames
 	
 	--SHOULD THIS BE IMAGE_SIZE??
 	function FindNextPos(size)
-		rows = math.floor(win_height / size)
+		-- Account for spell name text above icons if enabled
+		local extra_height = 0
+		if show_spell_names == "true" then
+			extra_height = text_height
+		end
+		
+		-- Calculate available space including text above and below icons
+		-- When spell names are shown: spell_name + icon + margin + timer
+		-- When spell names are hidden: icon + margin + timer
+		local total_item_height = size + text_height + text_margin_top + extra_height
+		
+		rows = math.floor(win_height / total_item_height)
 		cols = math.floor(win_width / size)
 		cur_col = math.floor((#infos) % cols)
 		cur_row = math.floor((#infos) / cols) >= 0 and math.floor((#infos) / cols) or 0
 		x = x_off + cur_col * size
-		y = y_off + cur_row * size + cur_row * (text_height + text_margin_top)
+		y = y_off + cur_row * total_item_height + extra_height
 		return x, y
 	end
 
@@ -1141,9 +1230,22 @@ end -- PlayAllMovieFrames
 	end
 	
 	function ResizeReleaseCallback()
-		-- Set needsRedraw flag for all infos after resize is complete
-		for k, v in pairs(infos) do
-			v.needsRedraw = true
+		-- Recalculate positions after resize is complete
+		if (#infos >= 1) then
+			local tmp_infos = infos
+			infos = {}
+			local warned = false
+			for i, v in ipairs(tmp_infos) do
+				local x, y = FindNextPos(image_size + 2)
+				v.x = x
+				v.y = y
+				v.needsRedraw = true
+				if (not warned and (x > win_width or y > win_height)) then
+					warned = true
+					Note("Your Affects window is too small to show all the icons, make it bigger!")
+				end
+				table.insert(infos, v)
+			end
 		end
 		window(true)
 		SaveState()
@@ -1630,10 +1732,13 @@ function right_click_menu(buttonIndex)
     
     -- Always display these options
     local str = "!"
-    str = str .. "Bring to Front"
+    str = str .. "Change Font"
+    str = str .. "|-|Bring to Front"
     str = str .. "|-|Send to Back"
     str = str .. "|-|Set images to small (32)"
     str = str .. "|-|Set images to large (64)"
+    str = str .. "|-|Toggle spell names"
+    str = str .. "|-|Change spell name color"
     
     -- Only add the "Choose Spell" option if in a valid button zone
     if slot ~= -1 and buttons[slot] then
@@ -1642,6 +1747,12 @@ function right_click_menu(buttonIndex)
     
     local opt = WindowMenu(winid, x, y, str)
     if opt == "" then
+        -- Menu was cancelled, still need to refresh the window
+        -- Force all affects to redraw
+        for k, v in pairs(infos) do
+            v.needsRedraw = true
+        end
+        window(true)
         return
     end
     
@@ -1649,28 +1760,95 @@ function right_click_menu(buttonIndex)
 
     -- Handle the selected option
     if opt == 1 then
-        CallPlugin("462b665ecb569efbf261422f", "boostMe", winid)
+        -- Change font
+        local wanted_font = utils.fontpicker(font_name, font_size)
+        if wanted_font then
+            font_name = wanted_font.name
+            font_size = wanted_font.size
+            -- Update the font in the window
+            WindowFont(winid, "font", font_name, font_size, false, false, false, false)
+            -- Set needsRedraw flag for all infos when changing font
+            for k, v in pairs(infos) do
+                v.needsRedraw = true
+            end
+        end
     elseif opt == 2 then
-        CallPlugin("462b665ecb569efbf261422f", "dropMe", winid)
+        CallPlugin("462b665ecb569efbf261422f", "boostMe", winid)
     elseif opt == 3 then
+        CallPlugin("462b665ecb569efbf261422f", "dropMe", winid)
+    elseif opt == 4 then
         image_size = 32
         SetVariable("image_size", image_size)
-        -- Set needsRedraw flag for all infos when changing image size
-        for k, v in pairs(infos) do
+        -- Clear the entire window first to remove any remnants
+        WindowRectOp(winid, 2, 0, 0, win_width, win_height, ColourNameToRGB("bg_color"))
+        -- Force recalculation of all positions since icon size changed
+        local tmp_infos = infos
+        infos = {}
+        for i, v in ipairs(tmp_infos) do
+            local x, y = FindNextPos(image_size + 2)
+            v.x = x
+            v.y = y
             v.needsRedraw = true
+            table.insert(infos, v)
         end
-    elseif opt == 4 then
+    elseif opt == 5 then
         image_size = 64
         SetVariable("image_size", image_size)
-        -- Set needsRedraw flag for all infos when changing image size
+        -- Clear the entire window first to remove any remnants
+        WindowRectOp(winid, 2, 0, 0, win_width, win_height, ColourNameToRGB("bg_color"))
+        -- Force recalculation of all positions since icon size changed
+        local tmp_infos = infos
+        infos = {}
+        for i, v in ipairs(tmp_infos) do
+            local x, y = FindNextPos(image_size + 2)
+            v.x = x
+            v.y = y
+            v.needsRedraw = true
+            table.insert(infos, v)
+        end
+    elseif opt == 6 then
+        -- Toggle spell name display
+        if show_spell_names == "true" then
+            show_spell_names = "false"
+        else
+            show_spell_names = "true"
+        end
+        SetVariable("show_spell_names", show_spell_names)
+        
+        -- Clear the entire window first to remove any remnants
+        WindowRectOp(winid, 2, 0, 0, win_width, win_height, ColourNameToRGB("bg_color"))
+        
+        -- Force recalculation of all positions since spacing changes with spell names
+        local tmp_infos = infos
+        infos = {}
+        for i, v in ipairs(tmp_infos) do
+            local x, y = FindNextPos(image_size + 2)
+            v.x = x
+            v.y = y
+            v.needsRedraw = true
+            table.insert(infos, v)
+        end
+    elseif opt == 7 then
+        -- Change spell name color
+        local newColor = PickColour(spell_name_color)
+        if newColor ~= -1 then
+            spell_name_color = newColor
+            SetVariable("spell_name_color", tostring(spell_name_color))
+        end
+        -- Force redraw of all infos whether color was changed or cancelled
         for k, v in pairs(infos) do
             v.needsRedraw = true
         end
-    elseif opt == 5 and slot ~= -1 and buttons[slot] then
+    elseif opt == 8 and slot ~= -1 and buttons[slot] then
         -- This option is only possible if "Choose Spell" was added, which means we're in a valid button zone
         choose_spell_for_button(slot)
     end
 
+    -- Always force redraw of all affects before refreshing window
+    for k, v in pairs(infos) do
+        v.needsRedraw = true
+    end
+    
     SaveState()
     window(true)
 end
@@ -1690,6 +1868,10 @@ end
 		SetVariable("win_height", win_height)
 		SetVariable("debug", tostring(debug))
 		SetVariable("prompt_gag", tostring(prompt_gag))
+		SetVariable("show_spell_names", show_spell_names)
+		SetVariable("spell_name_color", tostring(spell_name_color))
+		SetVariable("font_name", font_name)
+		SetVariable("font_size", tostring(font_size))
 	end
 	
 	function loaded()
