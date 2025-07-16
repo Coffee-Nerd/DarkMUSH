@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+
+<muclient>
+<plugin
+   name="DarkMUSH_Speedwalk"
+   author="Demon"
+   id="03d3e64d831253c045b432f8"
+   language="Lua"
+   purpose="Dynamic speedwalk to various areas using 'runto <area>'"
+   save_state="y"
+   date_written="2024-12-03"
+   requires="4.00"
+   version="1.0"
+   >
+
+<description trim="y">
+This plugin provides a `runto` alias to speedwalk to predefined areas by their names.
+Type `runto help` for usage information.
+</description>
+</plugin>
+
+  <aliases>
+    <!-- Help -->
+    <alias
+      match="^runto help$"
+      enabled="y"
+      regexp="y"
+      sequence="90"
+      send_to="12"
+      script="showRunToHelp"
+    />
+
+    <!-- Find by substring -->
+    <alias
+      match="^runto find (.+)$"
+      enabled="y"
+      regexp="y"
+      sequence="95"
+      script="handleFind"
+    />
+
+    <!-- Run by numeric ID -->
+    <alias
+      match="^runto (\d+)$"
+      enabled="y"
+      regexp="y"
+      sequence="98"
+      script="handleRunTo"
+    />
+
+    <!-- Run by name -->
+    <alias
+      match="^runto *(.+)$"
+      enabled="y"
+      regexp="y"
+      sequence="100"
+      script="handleRunTo"
+    />
+  </aliases>
+
+  <script>
+  
+  <![CDATA[
+-- Load color utilities
+dofile(GetPluginInfo(GetPluginID(), 20) .. "darkwiz_plugin_colors.lua")
+
+-- List of areas with IDs, names, and paths
+local area_list = {
+    { id = 1,  name = "Amazon",              path = "u6s2e4sws4w" },
+    { id = 2,  name = "Ancient Crypt, The",  path = "un10e2sde2sws" },
+    { id = 3,  name = "Ancient Rome",        path = "u6s2e3s10w" },
+    { id = 4,  name = "Awakening Madness",   path = "u6s2e3send3w4n" },
+    { id = 5,  name = "Barren Wastelands, The", path = "10nuneu2n4w11n9e" },
+    { id = 6,  name = "Bird House",          path = "u6n6w" },
+    { id = 7,  name = "Camelot",             path = "un9w2sdsw2n" },
+    { id = 8,  name = "Castle Bellevue",     path = "u10nuneu2n2w3n2w2n" },
+    { id = 9,  name = "Castle Reinhold",     path = "u6s2e3sends3es2es" },
+    { id = 10, name = "Combat Zone",         path = "un9es;touch head" },
+    { id = 11, name = "Crossworlds",         path = "u10nuneu2nu2nend3s;touch coffin;d;touch staff" },
+    { id = 12, name = "Dark Crystal, The",   path = "un9wne2nw2nw;touch box;enter gate" },
+    { id = 13, name = "Den of Vampires",     path = "un10e2sde2sen2e2s3e2se" },
+    { id = 14, name = "Drandur",             path = "u10nuneu2n4w6n" },
+    { id = 15, name = "Druid Forest",        path = "un10e2su3edn" },
+    { id = 16, name = "Dungeons of Shame",   path = "u10nuneu2n4w11n8wd" },
+    { id = 17, name = "Dwarven Fortress",    path = "un10e2sueuw2ne3ne3ne" },
+    { id = 18, name = "Elements of Death",   path = "u6sese2s2e3seseseswswsw2s" },
+    { id = 19, name = "Enchanted Fields",    path = "un10e2sd2wn" },
+    { id = 20, name = "Fairy Forest, The",   path = "u10nuneu2n6wn2w5n2w2nw2nd2n" },
+    { id = 21, name = "Forbidden Springs",   path = "un10e2sueunn" },
+    { id = 22, name = "Forsaken Island",     path = "un18es" },
+    { id = 23, name = "Ghandalf's Workshop", path = "un7wn" },
+    { id = 24, name = "Ghost Town",          path = "u9ne" },
+    { id = 25, name = "Grim Lands, The",     path = "u6s2e3swnwd3sws5e2n2e2n3wnes3en" },
+    { id = 26, name = "Helsingborg",         path = "u6s2e3sends3en2e2n" },
+    { id = 27, name = "Hemiti's Lair",      path = "un10e2sun" },
+    { id = 28, name = "Hexen",               path = "u6s2e3send3sws5es2eses" },
+    { id = 29, name = "Keep of Mahn-Tor",    path = "un9wne2n3w2ndnw" },
+    { id = 30, name = "Kjeldora",            path = "u10nuneu2n5ed2e2n" },
+    { id = 31, name = "Kochan's Tomb",       path = "u10nuneu2n4e5n2e2ne3n3w2swn" },
+    { id = 32, name = "Korowai",             path = "u6s2e3sws3w6s2wnwne" },
+    { id = 33, name = "Krynn Inn, The",      path = "u3s3wne" },
+    { id = 34, name = "Labyrinth of Krynn",  path = "un4e2swd" },
+    { id = 35, name = "Lost Garden, The",    path = "un10e2su3ed2s" },
+    { id = 36, name = "Millenium Fayre",     path = "un10e2s6e" },
+    { id = 37, name = "Mines",               path = "u10nuneu2nun2e" },
+    { id = 38, name = "Mortal Kombat",       path = "un11e" },
+    { id = 39, name = "Mumboto",             path = "u6sese2sw5sw2swswsw" },
+    { id = 40, name = "Neverwinter Forest",   path = "un11wn4e2ne" },
+    { id = 41, name = "New Zenith",          path = "un9eun2e7u" },
+    { id = 42, name = "Potos Village",       path = "un10e2su2esn3ed" },
+    { id = 43, name = "Prism Town",          path = "u6sese2sw2n5es" },
+    { id = 44, name = "Quasqueton",          path = "un9w3nw3n3w2sw" },
+    { id = 45, name = "Sahara of Delusions", path = "u6s2e3swnwd3sws5e2n2e2n3wn" },
+    { id = 46, name = "Sanitarium",          path = "un9eunwn" },
+    { id = 47, name = "Seljuk, Village of",  path = "un7e4ne2n3e" },
+    { id = 48, name = "Sewers",              path = "u5n2w2sws2d" },
+    { id = 49, name = "Shaolin Temple",      path = "u10n2w2nu2wsu" },
+    { id = 50, name = "Sodom and Gomorrah",  path = "un9wne2n6wndn4wn" },
+    { id = 51, name = "Solace, Town Of",     path = "un10e2su3en" },
+    { id = 52, name = "Souls of Shadows",    path = "u10n2w2nun" },
+    { id = 53, name = "Sparta, City of",     path = "un9wne2n3w2ndne" },
+    { id = 54, name = "Tal'Hev, The Lands of", path = "u6s2e3s2en2en" },
+    { id = 55, name = "Volcano, The",        path = "u14nu2nen2e" },
+    { id = 56, name = "Yeti's Demise",       path = "u10nuneu2n4w11n6es" },
+}
+
+-- Build lookup tables
+local name_map = {}
+local id_map   = {}
+for _, e in ipairs(area_list) do
+  local key = e.name:gsub("%W", ""):lower()
+  name_map[key] = e.path
+  id_map[tostring(e.id)] = e.path
+end
+
+-- Utility print
+local function utilprint(msg)
+  AnsiNote(ColoursToANSI(msg))
+end
+
+-- Format area list for help & find
+local function format_list(entries)
+  table.sort(entries)
+  local max_len = 0
+  for _, v in ipairs(entries) do max_len = math.max(max_len, #v) end
+  local cols = 4
+  local out, row = {}, {}
+  for i,v in ipairs(entries) do
+    table.insert(row, string.format("%-"..(max_len+4).."s", v))
+    if #row==cols or i==#entries then
+      table.insert(out, table.concat(row))
+      row={}  
+    end
+  end
+  return table.concat(out, "\n")
+end
+
+    -- Helper to move trailing ", The" to the front
+    local function fixArticle(name)
+        local base, art = name:match("^(.-),%s*(The)$")
+        if base then
+            return art .. " " .. base
+        end
+        return name
+    end
+
+
+-- Function to display help for the plugin
+function showRunToHelp()
+    utilprint("@x228[@x220RunTo Plugin Help@x228]")
+    utilprint("@x238Use @Y'runto <num>'@x238 or @Y'runto <area>'@x238 to speedwalk to predefined areas.")
+    utilprint("@x238Use @Y'runto find <pattern>'@x238 to search areas by name.")
+    utilprint("@x238--------------------------------------------------------------------------------------------")
+    utilprint("@x238[@x220Available Areas:@x238]")
+
+    -- Build the list of “ID) Name” entries, fixing any ", The"
+    local entries = {}
+    for _, e in ipairs(area_list) do
+        local displayName = fixArticle(e.name)
+        table.insert(entries, string.format("%2d) %s", e.id, displayName))
+    end
+
+    -- Format into 4 columns
+    local formatted_list = format_list(entries, 4)
+    utilprint("@x220" .. formatted_list)
+
+    utilprint("@x238--------------------------------------------------------------------------------------------")
+    utilprint("@x238Example: @Y'runto  9    @x238or @Y'runto amazon")
+end
+
+
+-- Find handler
+function handleFind(name, line, w)
+    local pat = w[1]:lower()
+    local results = {}
+
+    for _, e in ipairs(area_list) do
+        if e.name:lower():find(pat, 1, true) then
+            local displayName = fixArticle(e.name)
+            table.insert(results, string.format("%2d) %s", e.id, displayName))
+        end
+    end
+
+    if #results > 0 then
+        utilprint("@x228[@x220Find results:@x228]")
+        utilprint("@x220" .. format_list(results))
+    else
+        utilprint("@x228[@x220Find:@x228] @RNo matches for '" .. pat .. "'")
+    end
+end
+
+
+-- Run handler
+function handleRunTo(name,line,w)
+  local key = w[1]
+  local path = id_map[key] or name_map[key:gsub("%W",""):lower()]
+  if path then
+    Execute("#"..path)
+    utilprint("@x228[@x220Running to:@x228] @Y"..fixArticle((area_list[tonumber(key)] or {name=key}).name)..
+              " @x228with path:@x220 "..path)
+  else
+    utilprint("@x228[@x220Invalid Area:@x228] @R"..key)
+    utilprint("@x238Type @Y'runto help'@x238 for valid areas.")
+  end
+end
+
+-- Install message
+function onPluginInstall()
+  utilprint("@x228[@x220RunTo Plugin Installed!@x228]")
+  utilprint("@x238Type @Y'runto help'@x238 for usage information.")
+end
+
+
+]]>
+</script>
+</muclient>
