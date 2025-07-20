@@ -12,7 +12,7 @@ language="Lua"
 purpose="Showing affects in a window"
 date_written="2019-07-03 12:04:56"
 requires="5.00"
-  version="3.3"
+  version="3.4"
 >
 
 </plugin>
@@ -163,7 +163,7 @@ requires="5.00"
 	
 	-- Miniwindow State
 	local winid = "win_" .. GetPluginID()
-	local version = "3.0"
+	local version = "3.4"
 	local hiddenWindow = winid .. "text_background_offscreen"
 	local bg_color = "#000000"
 	local last_refresh = 0 -- last window refresh
@@ -2015,6 +2015,12 @@ end
 		pending_removals = {}
 		login_received = false
 		connected = false
+		
+		-- Clear the visual window content to prevent overlap on reconnect
+		if window_visible then
+			show_window_no_movie()
+		end
+		
 		SaveState()
 	end
 	
