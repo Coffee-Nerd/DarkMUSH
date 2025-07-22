@@ -9,7 +9,7 @@
    purpose="DarkMUSH Group Monitor"
    date_written="2010-12-13 15:35:02"
    requires="4.73"
-   version="2.3"
+   version="2.4"
    save_state="y"
 >
 
@@ -36,7 +36,7 @@ details captured through GMCP.
 
 -- show the group window
 <alias
-   match="(groupon|group show)"
+   match="^(groupon|group show)$"
    enabled="y"
    regexp="y"
    sequence="100"
@@ -46,7 +46,7 @@ details captured through GMCP.
 
 -- hide the group window
 <alias
-   match="(groupoff|group hide)"
+   match="^(groupoff|group hide)$"
    enabled="y"
    regexp="y"
    sequence="100"
