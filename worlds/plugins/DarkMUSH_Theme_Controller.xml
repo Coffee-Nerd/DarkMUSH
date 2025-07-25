@@ -9,7 +9,7 @@
    purpose="Manages activating color themes"
    requires="5.05"
    save_state="y"
-   version="1.1"
+   version="1.2"
 >
 </plugin>
 
