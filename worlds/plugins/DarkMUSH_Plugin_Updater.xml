@@ -11,7 +11,7 @@
    save_state="y"
    date_written="2022-10-24 00:00:00"
    requires="4.00"
-   version="3.1"
+   version="3.2"
    >
 
 </plugin>
@@ -562,21 +562,25 @@ function updateAllPluginFiles(script_id)
                 utilprint("Extracting images.zip to images directory", "script")
                 local images_directory = script_directory .. "images/"
                 
-                -- Create images directory (Windows/Unix compatible)
+                -- Clear and recreate images directory to ensure clean extraction
+                utilprint("Clearing existing images directory for clean extraction", "script")
                 if os.getenv("OS") and os.getenv("OS"):lower():find("windows") then
+                    os.execute("rmdir /S /Q \"" .. images_directory:gsub("/", "\\") .. "\" 2>nul")
                     os.execute("mkdir \"" .. images_directory:gsub("/", "\\") .. "\" 2>nul")
                 else
+                    os.execute("rm -rf \"" .. images_directory .. "\"")
                     os.execute("mkdir -p \"" .. images_directory .. "\"")
                 end
                 
                 -- Extract ZIP file to images directory (Windows-compatible)
                 local extractCommand
                 if os.getenv("OS") and os.getenv("OS"):lower():find("windows") then
-                    -- Windows: Use PowerShell to extract ZIP
-                    extractCommand = "powershell -Command \"Expand-Archive -Path '" .. localPath .. "' -DestinationPath '" .. images_directory .. "' -Force\""
+                    -- Windows: Use PowerShell to extract ZIP, then move files to correct location
+                    local tempDir = script_directory .. "temp_extract/"
+                    extractCommand = "powershell -Command \"Expand-Archive -Path '" .. localPath .. "' -DestinationPath '" .. tempDir .. "' -Force; Move-Item -Path '" .. tempDir .. "images/*' -Destination '" .. images_directory .. "' -Force; Remove-Item -Path '" .. tempDir .. "' -Recurse -Force\""
                 else
-                    -- Unix/Linux: Use unzip
-                    extractCommand = "cd \"" .. script_directory .. "\" && unzip -o \"" .. localPath .. "\" -d \"images/\""
+                    -- Unix/Linux: Use unzip with correct path handling
+                    extractCommand = "cd \"" .. script_directory .. "\" && unzip -o \"" .. localPath .. "\" && mv images/* \"" .. images_directory .. "\" && rmdir images"
                 end
                 
                 utilprint("Extracting with command: " .. extractCommand, "script")
