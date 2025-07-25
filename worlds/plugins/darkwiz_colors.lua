@@ -23,7 +23,7 @@ MAGENTA_CHAR = "m"
 CYAN_CHAR = "c"
 WHITE_CHAR = "w"
 
-BOLD_BLACK_CHAR = "D"
+BOLD_BLACK_CHAR = "d"
 BOLD_RED_CHAR = "R"
 BOLD_GREEN_CHAR = "G"
 BOLD_YELLOW_CHAR = "Y"
@@ -72,6 +72,9 @@ BOLD_CODES_CAPTURE_PATTERN = "(" .. CODE_PREFIX .. "[" .. BOLD_CHARS .. "])"
 NORMAL_CODES_CAPTURE_PATTERN = "(" .. CODE_PREFIX .. "[" .. NORMAL_CHARS .. "])"
 NONX_CODES_CAPTURE_PATTERN = "(" .. CODE_PREFIX .. "[^" .. XTERM_CHAR .. "])"
 CODE_REST_CAPTURE_PATTERN = "(" .. CODE_PREFIX .. "%a)([^" .. CODE_PREFIX .. "]*)"
+HEX6_FG_PATTERN = CODE_PREFIX .. "X([0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f])"
+HEX6_BG_PATTERN = CODE_PREFIX .. "1X([0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f])"
+
 
 X3DIGIT_FORMAT = XTERM_CODE .. "%03d"
 X2DIGIT_FORMAT = XTERM_CODE .. "%02d"
@@ -237,12 +240,256 @@ local function init_xterm_colors()
    end
 end
 
+
+
 init_xterm_colors()
 init_basic_colors()
 
+
+---------------------------------------------------------------------------
+--  Helpers
+---------------------------------------------------------------------------
+
+-- 24-bit #RRGGBB  ➜  numeric BGR that MUSHclient wants (0xBBGGRR)
+local function hex6_to_bgr (hex)
+  local r = tonumber (hex:sub (1,2), 16)
+  local g = tonumber (hex:sub (3,4), 16)
+  local b = tonumber (hex:sub (5,6), 16)
+  return b * 0x10000 + g * 0x100 + r
+end
+
+-- x-term 0–255  ➜  numeric BGR
+local function xterm_to_bgr (idx)
+  idx = tonumber (idx)
+  if not idx or idx < 0 or idx > 255 then
+    return code_to_client_color [WHITE_CODE]   -- fallback
+  end
+  -- 0–15  are the normal/bright ANSI colours (use the table we already have)
+  if idx <= 15 then
+    return code_to_client_color [ first_15_to_code [idx] ]
+  end
+  -- 16–231  6×6×6 colour cube
+  if idx <= 231 then
+    local i  = idx - 16
+    local r6 = math.floor (i / 36)
+    local g6 = math.floor ((i % 36) / 6)
+    local b6 = i % 6
+    local cube = { 0, 95, 135, 175, 215, 255 }
+    local r, g, b = cube[r6+1], cube[g6+1], cube[b6+1]
+    return b * 0x10000 + g * 0x100 + r
+  end
+  -- 232–255  grayscale ramp
+  local v = 8 + (idx - 232) * 10
+  return v * 0x010101            -- R = G = B so RGB == BGR
+end
+
+------------------------------------------------------------------------
+--  True-colour helper  –  RRGGBB  ➔  BGR integer (0xBBGGRR)
+------------------------------------------------------------------------
+local function hex6_to_bgr (hex)
+  local r = tonumber (hex:sub ( 1, 2 ), 16)
+  local g = tonumber (hex:sub ( 3, 4 ), 16)
+  local b = tonumber (hex:sub ( 5, 6 ), 16)
+  -- B * 65536  +  G * 256  +  R
+  return b * 0x10000 + g * 0x100 + r
+end
+
+---------------------------------------------------------------------------
+--  True-colour / 256-colour / legacy parser
+---------------------------------------------------------------------------
+local function TrueColorStyles(s, default_fg, default_bg, multiline, dollarC)
+  local fg   = default_fg or code_to_client_color[WHITE_CODE]
+  local bg   = default_bg or 0
+  local bold = false
+
+  local buf, styles = {}, {}
+  -- this holds the last code we parsed, for the next flush()
+  local current_fromx = nil
+  
+
+  local function flush()
+    if #buf > 0 then
+      table.insert(styles, {
+        fromx       = current_fromx,         -- the exact code we saw
+        text        = table.concat(buf),
+        length      = #buf,
+        textcolour  = fg,
+        backcolour  = (bg ~= 0) and bg or nil,
+        bold        = bold,
+      })
+      buf = {}
+    end
+  end
+
+  local i, n = 1, #s
+  while i <= n do
+    if s:sub(i,i) ~= "$" then
+      buf[#buf+1] = s:sub(i,i)
+      i = i + 1
+
+    else
+      -- literal "$$"
+      if s:sub(i+1,i+1) == "$" then
+        buf[#buf+1] = "$"
+        i = i + 2
+        goto cont
+      end
+
+      flush()
+      i = i + 1
+
+      -- background flag?
+      local isBg = false
+      if s:sub(i,i) == "1" then
+        isBg, i = true, i + 1
+      end
+
+      local c = s:sub(i,i)
+      -- reset code
+      if c == "0" then
+        fg, bg, bold     = default_fg or code_to_client_color[WHITE_CODE],
+                           default_bg or 0,
+                           false
+        current_fromx    = "$0"
+        i = i + 1
+
+      -- 24-bit true-colour
+      elseif c == "X" then
+        -- Extract exactly 6 characters and validate them all as hex
+        if i + 6 <= n then
+          local hex = s:sub(i+1, i+6)
+          -- Check that all 6 characters are valid hex digits
+          if hex:match("^[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]$") then
+            -- Valid 6-digit hex color
+            local r = tonumber(hex:sub(1,2),16)
+            local g = tonumber(hex:sub(3,4),16)
+            local b = tonumber(hex:sub(5,6),16)
+            local col = b * 0x10000 + g * 0x100 + r
+
+            if isBg then bg = col else fg = col end
+            current_fromx = (isBg and "$1X" or "$X") .. hex:lower()
+            i = i + 7  -- Skip past X + 6 hex digits
+          else
+            -- Invalid hex sequence - skip just the X
+            i = i + 1
+          end
+        else
+          -- Not enough characters remaining - skip just the X
+          i = i + 1
+        end
+
+      -- 256-colour
+      elseif c == "x" then
+        local num = s:match("^(%d%d?%d?)", i+1)
+        if num and tonumber(num) then
+          local idx = tonumber(num)
+          -- compute BGR same as your existing code
+          local col
+          if idx <= 15 then
+            col = code_to_client_color[first_15_to_code[idx]]
+          elseif idx <= 231 then
+            local v  = idx - 16
+            local r6 = math.floor(v/36)
+            local g6 = math.floor((v%36)/6)
+            local b6 = v%6
+            local cube = {0,95,135,175,215,255}
+            local r,g,b = cube[r6+1], cube[g6+1], cube[b6+1]
+            col = b*0x10000 + g*0x100 + r
+          else
+            local gray = 8 + (idx-232)*10
+            col = gray*0x010101
+          end
+
+          if isBg then bg = col else fg = col end
+          -- remember exactly what we parsed:
+          current_fromx = (isBg and "$1x" or "$x") .. num
+          i = i + 1 + #num
+        else
+          i = i + 1
+        end
+
+      -- “reset to last” passthrough
+      elseif c == "C" and dollarC then
+        current_fromx = "$C"
+        i = i + 1
+
+      -- legacy single-letter
+      else
+        local LEG = {
+          r=RED_CODE,   R=BOLD_RED_CODE,
+          g=GREEN_CODE, G=BOLD_GREEN_CODE,
+          y=YELLOW_CODE,Y=BOLD_YELLOW_CODE,
+          b=BLUE_CODE,  B=BOLD_BLUE_CODE,
+          m=MAGENTA_CODE,M=BOLD_MAGENTA_CODE,
+          c=CYAN_CODE,  C=BOLD_CYAN_CODE,
+          w=WHITE_CODE, W=BOLD_WHITE_CODE,
+          k=BLACK_CODE, D=BOLD_BLACK_CODE,
+        }
+        local code = LEG[c]
+        if code then
+          if isBg then
+            bg   = code_to_client_color[code]
+          else
+            fg   = code_to_client_color[code]
+            bold = (c == c:upper())
+          end
+        end
+        current_fromx = "$" .. c
+        i = i + 1
+      end
+    end
+    ::cont::
+  end
+
+  flush()
+  if multiline then
+    return split_boundaries(styles, "\n")
+  else
+    return styles
+  end
+end
+--- Hijack ColoursToStyles so *every* code—$r, $xNNN, $Xrrggbb, $1Xrrggbb, etc.—
+--- is parsed by TrueColorStyles (which sets style.fromx), ensuring StylesToColours
+--- will re-emit the exact original escape.
+function ColoursToStyles(input, default_fg, default_bg, multiline, dollarC_resets)
+   return TrueColorStyles(
+      input,
+      default_fg,
+      default_bg,
+      multiline,
+      dollarC_resets
+   )
+end
+
+      
+------------------------------------------------------------------------
+--  BGR numeric color to $Xrrggbb or $1Xrrggbb string
+------------------------------------------------------------------------
+local function bgr_to_hex6_code(bgr_number, is_background)
+  if bgr_number == nil then return nil end
+
+  -- MUSHclient stores colors as BGR: 0xBBGGRR
+  -- We need to extract R, G, B components
+  local r = bit.band(bgr_number, 0xFF)
+  local g = bit.band(bit.rshift(bgr_number, 8), 0xFF)
+  local b = bit.band(bit.rshift(bgr_number, 16), 0xFF)
+
+  local hex_code = string.format("%02x%02x%02x", r, g, b)
+
+  if is_background then
+    return CODE_PREFIX .. "1X" .. hex_code
+  else
+    return CODE_PREFIX .. "X" .. hex_code
+  end
+end
+
+
+
+      
 function StylesToColours(styles, dollarC_resets)
-   init_basic_colors()
-   local lastcode = ""
+   init_basic_colors() -- Ensures lookup tables are fresh
+   local last_fg_code = "" -- Keep track of last foreground code
+   local last_bg_code = "" -- Keep track of last background code
 
    -- convert to multiline if needed
    local style_lines = styles
@@ -255,24 +502,138 @@ function StylesToColours(styles, dollarC_resets)
       local line_parts = {}
       for _, style in ipairs(line) do
          local bold = style.bold or (style.style and ((style.style % 2) == 1))
-         local text = string.gsub(style.text, CODE_PREFIX, PREFIX_ESCAPE)
+         local text = string.gsub(style.text, CODE_PREFIX .. "(%W)", PREFIX_ESCAPE .. "%1")
          local textcolor = style.textcolour
-         local code = (
-            style.fromx
-            or textcolor and (
-               bold and client_color_to_bold_code[textcolor]
+         local backcolour = style.backcolour
+
+         local current_fg_code = nil
+         local current_bg_code = nil
+
+         -- Determine Foreground Code
+         if style.fromx then
+             -- If fromx contains a background code, it might be $1X... or $1x...
+             -- If fromx is just a foreground code like $X... or $x... or $r
+             -- We need to be careful here. 'fromx' stores the *entire original code sequence*
+             -- that led to this style. It could be "$r", "$x123", "$Xaabbcc", "$1x000", "$1Xddeeff", or even "$1r$G".
+             -- The original logic assumes `style.fromx` is a single, applicable code.
+
+             -- A simple approach: if fromx starts with $1, it's a background-inclusive code.
+             -- Otherwise, it's treated as foreground.
+             if style.fromx:sub(1,2) == CODE_PREFIX .. "1" then
+                 -- If fromx is like "$1Xaabbcc" or "$1x123" (background only or bg+fg bundled by some MUDs)
+                 -- Or if fromx is like "$1r$G" (complex)
+                 -- For simplicity now, if fromx defines a background, we assume it also covers foreground
+                 -- or that a subsequent style.fromx will set the foreground.
+                 -- This part is tricky if fromx is a composite code.
+                 -- Let's assume for now that if style.fromx is present, it's the dominant code.
+                 current_fg_code = style.fromx -- This might be a BG code, or a FG code.
+                                             -- The original code just used `style.fromx` as the single `code`.
+             else
+                 current_fg_code = style.fromx
+             end
+         elseif textcolor then
+            current_fg_code = (
+               (bold and client_color_to_bold_code[textcolor])
                or client_color_to_dim_code[textcolor]
                or client_color_to_xterm_code[textcolor]
-               or string.format(X3DIGIT_FORMAT, bgr_number_to_nearest_x256(textcolor))
+               -- MODIFICATION: Prefer $Xrrggbb for true colors over xterm approximation
+               or bgr_to_hex6_code(textcolor, false) -- false = foreground
+               -- The original fallback to bgr_number_to_nearest_x256 is now effectively replaced
+               -- by bgr_to_hex6_code for any color not matching the above.
             )
-         )
-
-         if code and (lastcode ~= code) then
-            table.insert(line_parts, code)
-            lastcode = code
          end
+
+         -- Determine Background Code (only if not covered by style.fromx explicitly setting a $1...)
+         -- This part is an enhancement, as original StylesToColours didn't explicitly reconstruct $1... codes
+         -- unless they were in style.fromx.
+         if style.fromx and style.fromx:sub(1,2) == CODE_PREFIX .. "1" then
+             current_bg_code = style.fromx -- Assume fromx handles it if it's a $1 code
+             if current_fg_code == current_bg_code then
+                -- If style.fromx was purely a background code e.g. "$1Xrrggbb",
+                -- we still need to determine the foreground code based on textcolor
+                if textcolor then
+                    current_fg_code = (
+                       (bold and client_color_to_bold_code[textcolor])
+                       or client_color_to_dim_code[textcolor]
+                       or client_color_to_xterm_code[textcolor]
+                       or bgr_to_hex6_code(textcolor, false)
+                    )
+                else
+                    current_fg_code = nil -- No textcolor to derive fg from
+                end
+             end
+         elseif backcolour and backcolour ~= 0 then -- 0 is often default_bg
+            -- Only generate a background code if it's not black (or your MUSHclient default bg)
+            -- and if it wasn't already handled by style.fromx
+            local default_bg_mush = GetInfo(24) -- MUSHclient default background color
+            if backcolour ~= default_bg_mush then
+                 current_bg_code = (
+                    -- Try to find a legacy $1L code first
+                    client_color_to_bold_code[backcolour] and (CODE_PREFIX .. "1" .. client_color_to_bold_code[backcolour]:sub(2))
+                    or client_color_to_dim_code[backcolour] and (CODE_PREFIX .. "1" .. client_color_to_dim_code[backcolour]:sub(2))
+                    -- Then an exact xterm $1xNNN code
+                    or client_color_to_xterm_code[backcolour] and (CODE_PREFIX .. "1" .. client_color_to_xterm_code[backcolour]:sub(2))
+                    -- Then $1Xrrggbb
+                    or bgr_to_hex6_code(backcolour, true) -- true = background
+                 )
+            end
+         end
+
+
+         -- Emit codes if they changed
+         -- Background code first, then foreground
+         if current_bg_code and (last_bg_code ~= current_bg_code or (current_fg_code and last_fg_code ~= current_fg_code) ) then
+            -- If BG changed OR (BG is same but FG changed, and BG is not nil)
+            -- we might need to re-emit BG if FG also changes, to ensure correct layering if FG reset BG
+            -- A simpler rule: if BG code is new, emit it.
+            if last_bg_code ~= current_bg_code then
+                table.insert(line_parts, current_bg_code)
+                last_bg_code = current_bg_code
+                -- If we set a background, the foreground might need to be reset if it wasn't explicitly set
+                last_fg_code = "" -- Force fg to be re-emitted if it exists
+            end
+         elseif not current_bg_code and last_bg_code ~= "" then
+             -- Background was removed, need to reset to default ($0 might do this, or rely on fg code)
+             -- For DarkMUSH, often a new foreground code implicitly resets background.
+             -- Or, if the game expects explicit background reset: table.insert(line_parts, "$10") ? (Not standard)
+             -- Let's assume setting a new FG code will handle it, or rely on $0.
+             last_bg_code = ""
+         end
+
+         if current_fg_code and (last_fg_code ~= current_fg_code) then
+            -- If style.fromx was a $1 code that also implies FG (e.g. some MUDs send $1r for red text on red bg)
+            -- and current_fg_code was set to that, it might be redundant here.
+            -- The logic is: if fromx handled everything, fg_code might be that fromx.
+            if current_fg_code ~= current_bg_code then -- Avoid re-emitting if fromx was a combined BG/FG code already emitted as BG
+                table.insert(line_parts, current_fg_code)
+            end
+            last_fg_code = current_fg_code
+         elseif not current_fg_code and last_fg_code ~= "" and not current_bg_code then
+             -- If only foreground is cleared, and no background is being set,
+             -- we might need a reset like $0 if the intention is default color.
+             -- However, if text follows, and it has no color, it implies default.
+             -- If current_bg_code is also nil, then we are resetting to default.
+             -- $0 is the general reset.
+             -- If textcolor is nil, and backcolor is nil/default, it's a reset.
+             if not textcolor and (not backcolour or backcolour == 0 or backcolour == GetInfo(24)) then
+                 if last_fg_code ~= (CODE_PREFIX .. "0") and last_bg_code ~= (CODE_PREFIX .. "0") then
+                    table.insert(line_parts, CODE_PREFIX .. "0")
+                    last_fg_code = CODE_PREFIX .. "0"
+                    last_bg_code = CODE_PREFIX .. "0"
+                 end
+             else
+                last_fg_code = ""
+             end
+         end
+
          if dollarC_resets then
-            text = text:gsub("%$C", lastcode)
+            -- $C should reset to the last *foreground* color
+            local effective_last_fg = last_fg_code
+            if effective_last_fg == "" or effective_last_fg == (CODE_PREFIX .. "0") then
+                -- If last fg code was reset or empty, use white as fallback for $C
+                effective_last_fg = WHITE_CODE
+            end
+            text = text:gsub("%$C", effective_last_fg)
          end
          table.insert(line_parts, text)
       end
@@ -452,170 +813,82 @@ function split_boundaries(styles, separator)
    return style_lines
 end
 
--- Converts text with colour codes in it into a line of style runs or multiple lines of style runs split at newlines if multiline is true.
--- default_foreground_color and background_color can be Aardwolf color codes or MUSHclient's raw numeric color values
--- dollarC_resets is a boolean for whether "$C" in the input will behave like the leading foreground color (default color if no color found at front)
-function ColoursToStyles(input, default_foreground_color, background_color, multiline, dollarC_resets)
-   -- This function would be a lot simpler if I weren't trying to preserve whether a color came from an xterm code or
-   -- not for round-trip safety. :(
-   init_basic_to_color()
-
-   local default_foreground_code = nil
-   local default_foreground_bold = false
-   if default_foreground_color == nil then
-      default_foreground_color = code_to_client_color[WHITE_CODE]
-      default_foreground_code = WHITE_CODE
-   elseif type(default_foreground_color) == "string" then
-      default_foreground_code = default_foreground_color
-      if default_foreground_code:sub(1, 1) ~= CODE_PREFIX then
-         default_foreground_code = CODE_PREFIX .. default_foreground_code
-      end
-      default_foreground_color = code_to_client_color[default_foreground_code] or
-          x_to_client_color[default_foreground_code]
-      default_foreground_bold = is_bold_code[default_foreground_code] or false
-      assert(default_foreground_color,
-         "Invalid default_foreground_color setting. Codes must correspond to one of the available color codes.")
-   elseif type(default_foreground_color) == "number" then
-      default_foreground_code = client_color_to_xterm_code[default_foreground_color]
-   end
-
-   if type(background_color) == "string" then
-      if background_color:sub(1, 1) ~= CODE_PREFIX then
-         background_color = CODE_PREFIX .. background_color
-      end
-      background_color = code_to_client_color[background_color] or x_to_client_color[background_color]
-      assert(background_color,
-         "Invalid background_color setting. Codes must correspond to one of the available color codes.")
-   end
-
-   section = input
-
-   local styles = {}
-   if section:find(CODE_PREFIX, nil, true) then
-      section = section:gsub(PREFIX_ESCAPE, "\0")        -- change @@ to 0x00
-      section = section:gsub(TILDE_PATTERN, "~")         -- fix tildes (historical)
-      section = section:gsub(X_NONNUMERIC_PATTERN, "%1") -- strip invalid xterm codes (non-number)
-      section = section:gsub(X_THREEHUNDRED_PATTERN, "") -- strip invalid xterm codes (300+)
-      section = section:gsub(X_TWOSIXTY_PATTERN, "")     -- strip invalid xterm codes (260+)
-      section = section:gsub(X_TWOFIFTYSIX_PATTERN, "")  -- strip invalid xterm codes (256+)
-      section = section:gsub(HIDDEN_GARBAGE_PATTERN, "") -- strip hidden garbage
-
-      local tokens = section:split(ALL_CODES_PATTERN, true)
-      local num_tokens = #tokens
-      local first_i = 1
-      if tokens[1] == "" then
-         -- If the line starts with a color code, there will be a blank token at the start before the first color code
-         -- because of the split. Skip it and start at the color code.
-         if num_tokens > 1 then
-            first_i = 2
-         end
-      else
-         -- If the line does not start with a color code, add a dummy slot for the default code to go in.
-         tokens[0] = ""
-         first_i = 0
-      end
-
-      local color = default_foreground_color
-      local code = default_foreground_code
-      local first_color = nil
-      local first_code_bold = nil
-      for i = first_i, num_tokens - 1, 2 do
-         code = tokens[i] or code
-         local text = tokens[i + 1]:gsub("%z", CODE_PREFIX) -- put any @ characters back
-         local from_x = nil
-         if code == XTERM_CODE then                         -- xterm 256 colors
-            local num = nil
-            num, text = text:match("(%d%d?%d?)(.*)")
-            code = code .. num
-            from_x = code
-
-            -- Aardwolf treats x1...x15 as normal ANSI colors.
-            -- That behavior does not match MUSHclient's.
-            num = tonumber(num)
-            if num <= 15 then
-               color = code_to_client_color[first_15_to_code[num]]
-            else
-               color = x_to_client_color[code]
-            end
-         else
-            color = code_to_client_color[code]
-         end
-         color = color or default_foreground_color
-
-         local function add_token(styles, text, from_x, is_bold, color, background_color)
-            table.insert(styles,
-               {
-                  fromx = from_x,
-                  text = text,
-                  bold = is_bold or false,
-                  length = #text,
-                  textcolour = color,
-                  backcolour = background_color
-               })
-         end
-
-         local is_bold = is_bold_code[code]
-         if dollarC_resets then
-            for i, v in ipairs(text:split("%$C")) do
-               if i > 1 then
-                  color = default_foreground_color
-                  is_bold = default_foreground_bold
-               end
-               add_token(styles, v, from_x, is_bold, color, background_color)
-            end
-         else
-            add_token(styles, text, from_x, is_bold, color, background_color)
-         end
-      end
-   else
-      -- No colour codes, create a single style.
-      styles[1] = {
-         text = section,
-         bold = is_bold_code[default_foreground_code] or false,
-         length = #section,
-         textcolour = default_foreground_color,
-         backcolour = background_color
-      }
-   end
-
-   if multiline then
-      return split_boundaries(styles, "\n")
-   else
-      return styles
-   end
+------------------------------------------------------------------------
+--  strip_colours  –  understands $Xrrggbb  /  $1Xrrggbb
+------------------------------------------------------------------------
+function strip_colours (s)
+  s = s:gsub (PREFIX_ESCAPE, "\0")
+       :gsub (TILDE_PATTERN, "~")
+       :gsub (X_ANY_DIGITS_PATTERN, "")
+       :gsub (CODE_PREFIX .. "1?X%x%x%x%x%x%x", "")  -- strip 24-bit
+       :gsub (ALL_CODES_PATTERN, "")
+       :gsub ("%z", CODE_PREFIX)
+  return s
 end
 
--- Strip all color codes from a string
-function strip_colours(s)
-   s = s:gsub(PREFIX_ESCAPE, "\0")      -- change @@ to 0x00
-   s = s:gsub(TILDE_PATTERN, "~")       -- fix tildes (historical)
-   s = s:gsub(X_ANY_DIGITS_PATTERN, "") -- strip valid and invalid xterm color codes
-   s = s:gsub(ALL_CODES_PATTERN, "")    -- strip normal color codes and hidden garbage
-   return (s:gsub("%z", CODE_PREFIX))   -- put @ back (has parentheses on purpose)
-end                                     -- strip_colours
-
--- Convert Aardwolf and short x codes to 3 digit x codes
+------------------------------------------------------------------------
+--  canonicalize_colours
+--  • makes every legacy/xterm code canonical
+--      - $r → $x001     ($xNNN always 3-digit)
+--      - $x7 → $x007
+--  • optionally folds the old 16-colour letters into x-codes
+--      when keep_original == false        (unchanged behaviour)
+--  • **leaves true-colour codes alone**,
+--      merely lower-casing the hex so there’s exactly one spelling
+--      for any given colour.
+------------------------------------------------------------------------
 function canonicalize_colours(s, keep_original)
-   if s:find(CODE_PREFIX, nil, true) then
-      s = s:gsub(X_DIGITS_CAPTURE_PATTERN, function(a)
-         local b = tonumber(a)
-         if b and b <= 255 and b >= 0 then
-            if keep_original and b <= 15 then
-               return first_15_to_code[b]
-            end
-            return string.format(X3DIGIT_FORMAT, b)
-         else
-            return ""
-         end
-      end)
-      if not keep_original then
-         s = s:gsub(NONX_CODES_CAPTURE_PATTERN, function(a)
-            return code_to_xterm[a]
-         end)
-      end
-   end
-   return s
+  if not s:find(CODE_PREFIX, 1, true) then
+    return s
+  end
+
+  -- 1) normalize any $Xrrggbb / $1Xrrggbb → lowercase hex
+  s = s
+    :gsub(CODE_PREFIX .. "1?X(%x%x%x%x%x%x)",
+          function(hex) return CODE_PREFIX .. "X" .. hex:lower() end)
+
+  -- 2) pad any $xN or $xNN → $xNNN
+  s = s:gsub(X_DIGITS_CAPTURE_PATTERN, function(digits)
+    local n = tonumber(digits)
+    if n and n <= 255 then
+      return string.format(X3DIGIT_FORMAT, n)
+    end
+    return ""  -- invalid → strip
+  end)
+
+  -- 2.5) convert every $xNNN / $1xNNN → true-colour hex
+  --     using the client’s xterm→BGR table (extended_colours)
+  s = s:gsub("%$(1?)x(%d%d%d)", function(bg_flag, num)
+    local idx = tonumber(num)
+    if not idx or idx > 255 then
+      return ""  -- invalid
+    end
+    -- look up BGR numeric and split into R,G,B
+    local bgr = xterm_number_to_client_color[idx]
+    if not bgr then
+      return ""  -- fallback
+    end
+    local b = math.floor(bgr / 0x10000) % 0x100
+    local g = math.floor(bgr / 0x100)    % 0x100
+    local r = bgr                         % 0x100
+    local hex = string.format("%02x%02x%02x", r, g, b)
+    if bg_flag == "1" then
+      return CODE_PREFIX .. "1X" .. hex
+    else
+      return CODE_PREFIX .. "X"  .. hex
+    end
+  end)
+
+  -- 3) fold legacy single-letter codes into $xNNN if desired
+  if not keep_original then
+    s = s:gsub(NONX_CODES_CAPTURE_PATTERN, function(letter_code)
+      return code_to_xterm[letter_code] or letter_code
+    end)
+  end
+
+  return s
 end
+
 
 -- Strip all color codes from a table of styles
 function strip_colours_from_styles(styles)
