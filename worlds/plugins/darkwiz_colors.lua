@@ -346,11 +346,11 @@ local function TrueColorStyles(s, default_fg, default_bg, multiline, dollarC)
 
       local c = s:sub(i,i)
       -- reset code
-      if c == "0" then
+      if c == "0" or c == "n" or c == "N" then
         fg, bg, bold     = default_fg or code_to_client_color[WHITE_CODE],
                            default_bg or 0,
                            false
-        current_fromx    = "$0"
+        current_fromx    = "$" .. c
         i = i + 1
 
       -- 24-bit true-colour
