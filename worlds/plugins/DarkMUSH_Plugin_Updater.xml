@@ -11,7 +11,7 @@
    save_state="y"
    date_written="2022-10-24 00:00:00"
    requires="4.00"
-   version="3.2"
+   version="3.3"
    >
 
 </plugin>
@@ -118,12 +118,21 @@ function OnPluginInstall ()
 end
 
 function OnPluginEnable ()
+     -- Initialize with empty tables first
      hpmVar = {}
      hpmVar["cache"] = {}
      ghName = nil
+     
+     -- Then load saved state if it exists (this will overwrite the empty tables)
      if GetVariable ("hpmpastfirstinstall2") == "true" then
 		assert (loadstring (GetVariable ("hpmVar") or "")) ()
 	end
+     
+     -- Only initialize cache if it's still empty after loading
+     if not hpmVar["cache"] then
+          hpmVar["cache"] = {}
+     end
+     
      makeRawUrl()
      buildCache()    
 end
@@ -612,7 +621,15 @@ function updatePlugin(name, line, wc)
     local success = updateAllPluginFiles(script_id)
     if success then
         utilprint("Plugin @G" .. hpmVar["cache"][script_id]["shortName"] .. "@c Updated with all files! Enjoy!", "script")
-        LoadPlugin(script_name)
+        local loadResult = LoadPlugin(script_name)
+        if loadResult ~= 0 then
+            utilprint("Error loading updated plugin: " .. script_name .. " (Error code: " .. loadResult .. ")", "error")
+        else
+            utilprint("Updated plugin loaded successfully: " .. script_name, "script")
+            -- Force a rebuild of the cache for this specific plugin
+            -- This needs to happen after LoadPlugin to get the new version
+            DoAfterSpecial(0.5, 'updateSinglePluginCache("' .. script_id .. '")', sendto.script)
+        end
     else
         utilprint("Plugin update failed for @R" .. hpmVar["cache"][script_id]["shortName"], "error")
     end
@@ -625,7 +642,14 @@ function installPlugin(name, line, wc)
     local success = updateAllPluginFiles(script_id)
     if success then
         utilprint("@x238Plugin @Y" .. hpmVar["cache"][script_id]["shortName"] .. "@x238 Installed... Enjoy!", "script")
-        LoadPlugin(script_name)
+        local loadResult = LoadPlugin(script_name)
+        if loadResult ~= 0 then
+            utilprint("Error loading plugin: " .. script_name .. " (Error code: " .. loadResult .. ")", "error")
+        else
+            utilprint("Plugin loaded successfully: " .. script_name, "script")
+            -- Update cache after successful load
+            DoAfterSpecial(0.5, 'updateSinglePluginCache("' .. script_id .. '")', sendto.script)
+        end
     else
         utilprint("Plugin installation failed for @R" .. hpmVar["cache"][script_id]["shortName"], "error")
     end
@@ -923,6 +947,49 @@ function buildCache()
     end
 end
 
+function updateSinglePluginCache(script_id)
+    -- Update the cache for a single plugin after it's been reloaded
+    if not hpmVar or not hpmVar["cache"] or not hpmVar["cache"][script_id] then
+        return
+    end
+    
+    local cache_entry = hpmVar["cache"][script_id]
+    local pluginId = cache_entry.pluginId
+    
+    -- Debug: Check if plugin is actually loaded
+    if not IsPluginInstalled(pluginId) then
+        utilprint("Plugin " .. cache_entry.shortName .. " is not installed! Cannot update cache.", "error")
+        return
+    end
+    
+    -- Get the updated local version from the now-loaded plugin
+    local newLocalVersion = GetPluginInfo(pluginId, 19)
+    utilprint("Debug: Plugin ID: " .. pluginId .. ", Version from GetPluginInfo: " .. tostring(newLocalVersion), "script")
+    
+    -- Also try to read the version directly from the file
+    local script_directory = GetInfo(60)
+    local xmlPath = script_directory .. cache_entry.rawname .. ".xml"
+    local file = io.open(xmlPath, "r")
+    if file then
+        local content = file:read("*a")
+        file:close()
+        local fileVersion = content:match('version="(%d+%.%d+)"')
+        utilprint("Debug: Version in file " .. xmlPath .. ": " .. tostring(fileVersion), "script")
+        
+        -- Use file version if GetPluginInfo is returning stale data
+        if fileVersion and fileVersion ~= newLocalVersion then
+            utilprint("Warning: GetPluginInfo returned " .. tostring(newLocalVersion) .. " but file has " .. fileVersion, "script")
+            newLocalVersion = fileVersion
+        end
+    end
+    
+    if newLocalVersion then
+        hpmVar["cache"][script_id]["localVersion"] = newLocalVersion
+        SaveState()
+        utilprint("Cache updated: " .. cache_entry.shortName .. " local version is now " .. newLocalVersion, "script")
+    end
+end
+
 function raw_get_cache(retval, page, status, headers, full_status, request_url)
     local webName, rawName, webVersion, pluginId, localVersion, localName
     local script_directory = GetInfo(60)
@@ -933,7 +1000,10 @@ function raw_get_cache(retval, page, status, headers, full_status, request_url)
         pluginId = string.match(page, '%s+id="(%w+)"')
         purpose = string.match(page, '%s+purpose="([^"]+)"')
         localVersion = GetPluginInfo(pluginId, 19)
-        localName = script_directory.. rawName.. ".xml"
+        
+        -- Use actual filename from URL instead of constructing from plugin name
+        local actualFileName = request_url:match("/([^/]+)$")
+        localName = script_directory .. actualFileName
         
         -- Get all files associated with this plugin from our stored mapping
         local allFiles = {}
