@@ -12,7 +12,7 @@ language="Lua"
 purpose="Showing affects in a window"
 date_written="2019-07-03 12:04:56"
 requires="5.00"
-  version="3.4"
+  version="3.5"
 >
 
 </plugin>
@@ -209,14 +209,14 @@ requires="5.00"
 	
 	affect_icons = {
 		["68"] = "invis",
-		["94"] = "sanctuary",
 		["10"] = "blind",
 		["35"] = "curse",
 		["103"] = "sleep",
-		["329"] = "haste",
 		["374"] = "surge",
 		["hungry"] = "hungry",
 		["thirsty"] = "thirsty",
+		["94"] = "sanctuary",
+		["97"] = "blade_barrier", -- blade barrier
 		-------------BITVECTORS BELOW-----------------
 		["2"] = "invisible",
 		["128"] = "sanctuary",
@@ -249,12 +249,15 @@ requires="5.00"
 		["268435456"] = "waterbreath",
 		["536870912"] = "alert",
 		-------------NEWLY ADDED AFFECTS WITH NUMBERS----------------
-		["149"] = "prayer", -- heal
-		["375"] = "dragon_form",
-		["336"] = "mind_focus",
-		["7"] = "armor", -- armor
-		["328"] = "flesh_armor", -- flesh armor
-		["377"] = "holy_armor", -- holy armor
+		
+		["329"] = "haste",
+		["94"] = "sanctuary", -- does THIS fix it? double?
+		["149"] = "prayer",
+		["100"] = "dragon_form", -- demon, water, fire, lightning, acid, gas all same spell number.
+		["375"] = "water_breath",
+		["7"] = "armor", -- armor. Order matters or it conflicts with other _armor spells.
+		["328"] = "flesh_armor", -- need non-placeholder image
+		["377"] = "holy_armor", -- need non-placeholder image
 		["105"] = "stone_skin", -- stone_skin
 		["316"] = "displacement", -- displacement
 		["348"] = "suicidal_attack",
@@ -266,10 +269,9 @@ requires="5.00"
 		["299"] = "adrenaline_control", -- adrenaline control
 		["95"] = "magic_barrier", -- magic barrier
 		["356"] = "immunity", -- immunity
-		["355"] = "calm", -- awe
-		["97"] = "blade_barrier", -- blade barrier
-		["146"] = "fireshield", -- immolate
-		["147"] = "frostshield", -- frost breath
+		["355"] = "calm", 
+		["146"] = "fireshield", 
+		["147"] = "frostshield",
 		["84"] = "evil_protect", -- evil protection
 		["85"] = "good_protect", -- good protection
 		["37"] = "detect_all", -- detect all
@@ -278,20 +280,42 @@ requires="5.00"
 		["25"] = "athelas", -- athelas
 		["323"] = "ego_whip", -- ego whip
 		["6"] = "conjure_undead", -- animate dead (conjure undead alternative)
-		["364"] = "wilderness_aid", -- ward
-		["336"] = "mind_focus", -- levitation
+		["364"] = "wilderness_aid", -- this is actually 354
 		["309"] = "combat_mind", -- combat mind
 		["129"] = "alert",
-		["305"] = "biofeedback", -- biofeedback
+		["334"] = "intellect_fortress",
 		["306"] = "blur",
 		["325"] = "energy_containment",
-		["344"] = "intellect_fortress",
 		["337"] = "mental_barrier",
-		["101"] = "shield",
-		["75"]  = "soul_web",
-		["370"] = "spirit_thief",
+		["101"] = "shield", -- Order matters or it picks thought_shield icon.
 		["346"] = "thought_shield",
-		["405"] = "shadow_decoy",
+		["344"] = "shadow_decoy",
+		["305"] = "biofeedback",
+		["75"] = "soul_web",
+		["57"] = "fly", -- need non-placeholder image 
+		["89"] = "regenerate", -- need non-placeholder image
+		["322"] = "ectoplasmic_form",  -- need non-placeholder image
+		["370"] = "spirit_thief",
+		["46"] = "divine", -- need non-placeholder image
+		["383"] = "hold_alignment", -- need non-placeholder image
+		["150"] = "mind_focus",
+		["411"] = "rotting_flesh", -- need non-placeholder image
+		["327"] = "enhanced_strength", -- need non-placeholder image
+		["60"] = "giant_strength" -- need non-placeholder image	
+	}
+	
+	-- List to not include in snapshot
+	local no_snapshot = {
+		["25"] = "athelas", -- athelas. Auto casting a big tree when you're trying to haste feels bad man.
+		["323"] = "ego_whip", -- debuff
+		["10"] = "blind", -- debuff
+		["35"] = "curse", -- debuff
+		["103"] = "sleep", -- debuff
+		["353"] = "daemon", -- HUGE LAG when recast and daemon still alive.
+		["6"] = "conjure_undead", -- similar deals.
+		["364"] = "wilderness_aid", -- auto-recast and getting something other than nymph feels bad man.
+		["374"] = "surge", -- I maintain w/trigger, but it's mana intensive.
+		["100"] = "dragon_form" -- auto spell chooses acid, ew.
 	}
 	
 	-- We are using this as a set, these affects should be removed from the window
@@ -1467,9 +1491,14 @@ function CreateSnapshot(name, line, wildcards)
 	snapshots = json.decode(snapshots_data)
 	
 	-- Save current active affects
+
 	snapshots[snapshot_name] = {}
 	for k, v in pairs(active_affects) do
-		snapshots[snapshot_name][k] = v
+		if no_snapshot[tostring(k)] == nil then
+			snapshots[no_snapshot][k] = v
+		else
+			print("Ignored spell: " .. no_snapshot[tostring(k)])
+		end
 	end
 	
 	-- Save snapshots back to variable
@@ -1567,7 +1596,11 @@ function UpdateSnapshot()
 	-- Update selected snapshot with current active affects
 	snapshots[selected_snapshot] = {}
 	for k, v in pairs(active_affects) do
-		snapshots[selected_snapshot][k] = v
+		if no_snapshot[tostring(k)] == nil then
+			snapshots[selected_snapshot][k] = v
+		else
+			print("Ignored spell: " .. no_snapshot[tostring(k)])
+		end
 	end
 	
 	-- Save snapshots back to variable
