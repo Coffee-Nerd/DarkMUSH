@@ -116,6 +116,14 @@ requires="5.00"
 </alias>
 <alias
 	regexp="y"
+	match="^affects dragon (.+)$"
+	enabled="y"
+	sequence="100"
+	script="SelectDragonForm"
+	>
+</alias>
+<alias
+	regexp="y"
 	match="^affects help$"
 	enabled="y"
 	sequence="100"
@@ -193,6 +201,7 @@ requires="5.00"
 	warned_about_missing_files = false
 	snapshots = {} -- holds all created snapshots
 	selected_snapshot = GetVariable("selected_snapshot") or "default"
+	selected_dragon_form = GetVariable("selected_dragon_form") or "acid"
 	login_received = false -- flag to ignore affects until comm.login
 	connected = false -- flag to track connection state
 	pending_removals = {} -- queue of affects to be safely removed
@@ -304,26 +313,18 @@ requires="5.00"
 		["60"] = "giant_strength" -- need non-placeholder image	
 	}
 	
-	-- List to not include in snapshot
-	local no_snapshot = {
-		["25"] = "athelas", -- athelas. Auto casting a big tree when you're trying to haste feels bad man.
-		["323"] = "ego_whip", -- debuff
+	-- We are using this as a set, these affects should be removed from the window
+	-- and not draw a disabled state. Also filtered from buff snapshots
+	bad_affects = {
 		["10"] = "blind", -- debuff
 		["35"] = "curse", -- debuff
 		["103"] = "sleep", -- debuff
+		["25"] = "athelas", -- athelas. Auto casting a big tree when you're trying to haste feels bad man.
+		["323"] = "ego_whip", -- debuff
 		["353"] = "daemon", -- HUGE LAG when recast and daemon still alive.
 		["6"] = "conjure_undead", -- similar deals.
 		["364"] = "wilderness_aid", -- auto-recast and getting something other than nymph feels bad man.
 		["374"] = "surge", -- I maintain w/trigger, but it's mana intensive.
-		["100"] = "dragon_form" -- auto spell chooses acid, ew.
-	}
-	
-	-- We are using this as a set, these affects should be removed from the window
-	-- and not draw a disabled state
-	bad_affects = {
-		["10"] = "blind",
-		["35"] = "curse",
-		["103"] = "sleep",
 		-------------BITVECTORS BELOW-----------------
 		["1024"] = "curse",
 		["131072"] = "sleep"
@@ -1494,10 +1495,10 @@ function CreateSnapshot(name, line, wildcards)
 
 	snapshots[snapshot_name] = {}
 	for k, v in pairs(active_affects) do
-		if no_snapshot[tostring(k)] == nil then
-			snapshots[no_snapshot][k] = v
+		if bad_affects[tostring(k)] == nil then
+			snapshots[snapshot_name][k] = v
 		else
-			print("Ignored spell: " .. no_snapshot[tostring(k)])
+			print("Ignored spell: " .. bad_affects[tostring(k)])
 		end
 	end
 	
@@ -1575,6 +1576,11 @@ function SelectSnapshot(name, line, wildcards)
 	utilprint("$GSelected snapshot: $Y" .. snapshot_name)
 end
 
+function SelectDragonForm(name, line, wildcards)
+	selected_dragon_form = wildcards[1]
+	utilprint("$GSelected Dragon Form: $Y" .. selected_dragon_form)
+end
+
 function UpdateSnapshot()
 	if not selected_snapshot then
 		utilprint("$RNo snapshot selected. Use 'affects snapshot select <name>' first")
@@ -1596,10 +1602,10 @@ function UpdateSnapshot()
 	-- Update selected snapshot with current active affects
 	snapshots[selected_snapshot] = {}
 	for k, v in pairs(active_affects) do
-		if no_snapshot[tostring(k)] == nil then
+		if bad_affects[tostring(k)] == nil then
 			snapshots[selected_snapshot][k] = v
 		else
-			print("Ignored spell: " .. no_snapshot[tostring(k)])
+			print("Ignored spell: " .. bad_affects[tostring(k)])
 		end
 	end
 	
@@ -1759,7 +1765,11 @@ function SpellUp()
   			if skills[affect] then
   				command = affect
   			else 
-  				command = "c " .. spell_key
+				if spell_key == "100" then
+					command = "c " .. spell_key .. " " .. selected_dragon_form
+				else
+					command = "c " .. spell_key
+				end
   			end
   			Execute(command)
       	recastCount = recastCount + 1
@@ -1922,6 +1932,7 @@ end
 		SetVariable("spell_name_color", tostring(spell_name_color))
 		SetVariable("font_name", font_name)
 		SetVariable("font_size", tostring(font_size))
+		SetVariable("selected_dragon_form", selected_dragon_form)
 	end
 	
 	function loaded()
@@ -1941,6 +1952,7 @@ end
 		utilprint("$Y affects snapshot update             $R-->$W Updates selected snapshot with current affects")
 		utilprint("$Y affects snapshot backups            $R-->$W Views backup history for selected snapshot")
 		utilprint("$Y affects snapshot restore <1-5>      $R-->$W Restores snapshot from backup (1=latest)")
+		utilprint("$Y affects dragon <name>               $R-->$W Selects which dragon form to use when using spellup")
 		utilprint("$Y affects show                        $R-->$W Shows the affects window")
 		utilprint("$Y affects hide                        $R-->$W Hides the affects window")
 		utilprint("$Y affects help                        $R-->$W Displays this help page")
