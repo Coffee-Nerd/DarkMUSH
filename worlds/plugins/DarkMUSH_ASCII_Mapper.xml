@@ -10,18 +10,18 @@
    purpose="Displays the Ascii Map"
    date_written="2024-03-27"
    requires="4.00"
-   version="1.0"
+   version="2.0"
    save_state="y"
    >
 
 </plugin>
 <aliases>
 <alias
-	sequence="100"
-	match="set ascii font"
-	enabled="y"
-	send_to="12"
-	ignore_case="y">
+    sequence="100"
+    match="set ascii font"
+    enabled="y"
+    send_to="12"
+    ignore_case="y">
     <send>
 local wanted_font = utils.fontpicker(body_font_name, body_font_size) --font dialog
 if wanted_font then
@@ -29,115 +29,48 @@ if wanted_font then
     body_font_size = wanted_font.size
     SetVariable("body_font_size", body_font_size)
     SetVariable("body_font_name", body_font_name)
-    font_id = "font"
-    WindowFont("testwindow2", font_id, body_font_name, body_font_size, false, false, false, false, 0) -- normal font
-    util.print("$RSetting the font to ".. body_font_name .." with a size of ".. body_font_size)
-    MapTextWidth = math.max(WindowTextWidth("testwindow2", font_id, "1234567123456712345"))
-    if MapTextWidth and MapTextWidth > 0 then
-        win_width = MapTextWidth 
-        SetVariable("win_width", win_width)
-        win_height = MapTextWidth 
-        SetVariable("win_height", win_height)
+    
+    -- Just update the font settings without recreating
+    if my_window and my_window.set_font then
+        my_window:set_font({
+            body_font_name = body_font_name,
+            body_font_size = body_font_size
+        })
+        my_window:draw()
     end
-    my_window = ThemedTextWindow(
-        "testwindow2",                    -- string, required, a unique identifier for this window
-        0, -- integer, required, where to put it if the player hasn't moved it
-        0,  -- integer, required, where to put it if the player hasn't moved it
-        win_width,         -- integer, required, how big to make it if the player hasn't moved it -- width
-        win_height,        -- integer, required, how big to make it if the player hasn't moved it  -- height
-        "$x009DA$x202RK$x208MU$x214S$x220H$x01 AS$x190CI$x154I M$x118AP$x082PE$x047R",               -- string, optional (nil means no titlebar), text to put into the title
-        "center",       -- string, optional (default is "center"), "left", "center", or "right"
-        false,          -- boolean, optional (default is false), true adds a close button in the top left
-        true,            -- boolean, optional (default is false), make the window resizeable
-        false,       -- boolean, optional (default is false), add a scrollbar and mousewheel scrolling
-        false,       -- boolean, optional (default is false), make the text selectable
-        false,         -- boolean, optional (default is false), make the text copyable via right-click
-        false,        -- boolean, optional (default is false), turn detected URLs into clickable links
-        false,              -- boolean, optional (default is false), automatically wrap text lines that are too wide
-        body_font_name,       -- string, optional (default is Dina), override the title font name
-        12,       -- integer, optional (default is 10), override the title font size
-        body_font_name,        -- string, optional (default is Dina), override the body text font name
-        body_font_size,        -- integer, optional (default is 10), override the body text font size
-        17,        -- integer, optional (default is 1000), maximum number of text lines to keep
-        5,          -- integer, optional (default is 5 pixels), space between text and miniwindow frame
-        false,         -- boolean, optional (default is false), true will prevent the window from appearing until you call :show() on it
-        false    -- boolean, optional (default is false), if true, pixels the same color as Theme.PRIMARY_BODY will be transparent
-     )
-     SaveState()
+    
+    util.print("$RSetting the font to ".. body_font_name .." with a size of ".. body_font_size)
+    SaveState()
+else
+    util.print("$RFont selection cancelled.")
 end
 </send>
-
 </alias>
 <alias
-	sequence="100"
-	match="ascii help"
-	enabled="y"
-	send_to="12"
-	ignore_case="y"><send>
+    sequence="100"
+    match="ascii help"
+    enabled="y"
+    send_to="12"
+    ignore_case="y"><send>
      util.print("$RA help page will go here eventually.")
 </send></alias>
 <alias
     sequence="100"
-    match="ascii toggle output"
+    match="ascii fit"
     enabled="y"
     send_to="12"
     ignore_case="y">
     <send>
-        toggleOmitFromOutput()
+        my_window:fit_contents()
+        my_window:draw()
+        util.print("$RFitted ASCII map window to content size.")
     </send>
 </alias>
 </aliases>
-<triggers>
-<trigger
-    name="map_start"
-    sequence="100"
-    match="^{map_start}$"
-    enabled="y"
-    regexp="y"
-    omit_from_output="y"
-    send_to="12"
-    ignore_case="y">
-    <send>
-    startMapDrawing()
-    EnableTrigger("catchMap", true)
-    </send>
-</trigger>
-    <trigger
-    name="catchMap"
-    sequence="100"
-    match="*"
-    enabled="n"
-    regexp="n"
-    omit_from_output="y"
-    send_to="12"
-    ignore_case="y"
-    script="catchMap"
-    >
-    <send>
-    catchMap() -- Process each map line while drawing
-  --  print("catching map")
-    </send>
-    </trigger>
-    <trigger
-    name="map_end"
-    sequence="99"
-    match="^{map_end}$"
-    enabled="y"
-    omit_from_output="y"
-    regexp="y"
-    send_to="12"
-    ignore_case="y">
-    <send>
-    endMapDrawing()
-    EnableTrigger("catchMap", false)
-    </send>
-    </trigger>
-    </triggers>
+<!-- Triggers removed - using GMCP system -->
 <!--  Script  -->
 <script>
--- TODO: Add a print for cancelling font change
--- TODO: Check if font name/size has changed before resizing window.
--- TODO: Include the Fira Code font in the plugin.
+
 require "themed_miniwindows"
 require "gmcphelper"
 require "tprint"
@@ -147,133 +80,66 @@ require "serialize"
 dofile(GetPluginInfo(GetPluginID(), 20) .. "darkwiz_colors.lua")
 
 win_width = GetVariable("win_width") or 200
-win_height = GetVariable("win_width") or 200
+win_height = GetVariable("win_height") or 200
 body_font_name = GetVariable("body_font_name") or "Lucida Console"
-body_font_size = GetVariable("body_font_size") or 40
+body_font_size = tonumber(GetVariable("body_font_size")) or 10
 font_id = "font"
-MapTextWidth = math.max(WindowTextWidth("testwindow2", font_id, "1234567"))
+version = "2.0"
 my_window = ThemedTextWindow(
     "testwindow2",                    -- string, required, a unique identifier for this window
-    0,                  -- integer, required, where to put it if the player hasn't moved it
-    0,                  -- integer, required, where to put it if the player hasn't moved it
-    win_width,         -- integer, required, how big to make it if the player hasn't moved it -- width
-    win_height,        -- integer, required, how big to make it if the player hasn't moved it  -- height
-    "$x009DA$x202RK$x208MU$x214S$x220H$x011 AS$x190CI$x154I M$x118AP$x082PE$x047R",               -- string, optional (nil means no titlebar), text to put into the title
-    "center",       -- string, optional (default is "center"), "left", "center", or "right"
-    true,          -- boolean, optional (default is false), true adds a close button in the top left
-    true,            -- boolean, optional (default is false), make the window resizeable
-    false,       -- boolean, optional (default is false), add a scrollbar and mousewheel scrolling
-    false,       -- boolean, optional (default is false), make the text selectable
-    false,         -- boolean, optional (default is false), make the text copyable via right-click
-    false,        -- boolean, optional (default is false), turn detected URLs into clickable links
-    false,              -- boolean, optional (default is false), automatically wrap text lines that are too wide
-    body_font_name,       -- string, optional (default is Dina), override the title font name
-    12,       -- integer, optional (default is 10), override the title font size
-    body_font_name,        -- string, optional (default is Dina), override the body text font name
-    body_font_size,        -- integer, optional (default is 10), override the body text font size
-    17,        -- integer, optional (default is 1000), maximum number of text lines to keep
-    5,          -- integer, optional (default is 5 pixels), space between text and miniwindow frame
-    false,         -- boolean, optional (default is false), true will prevent the window from appearing until you call :show() on it
-    false    -- boolean, optional (default is false), if true, pixels the same color as Theme.PRIMARY_BODY will be transparent
- )
+    0,                                 -- integer, required, where to put it if the player hasn't moved it
+    0,                                 -- integer, required, where to put it if the player hasn't moved it
+    win_width,                         -- integer, required, how big to make it if the player hasn't moved it -- width
+    win_height,                        -- integer, required, how big to make it if the player hasn't moved it  -- height
+    "$x009DA$x202RK$x208MU$x214S$x220H$x011 AS$x190CI$x154I M$x118AP$x082PE$x047R $Gv ".. version,  -- string, optional (nil means no titlebar), text to put into the title
+    "center",                          -- string, optional (default is "center"), "left", "center", or "right"
+    true,                              -- boolean, optional (default is false), true adds a close button in the top left
+    true,                              -- boolean, optional (default is false), make the window resizeable
+    false,                             -- boolean, optional (default is false), add a scrollbar and mousewheel scrolling
+    false,                             -- boolean, optional (default is false), make the text selectable
+    false,                             -- boolean, optional (default is false), make the text copyable via right-click
+    false,                             -- boolean, optional (default is false), turn detected URLs into clickable links
+    false,                             -- boolean, optional (default is false), automatically wrap text lines that are too wide
+    body_font_name,                    -- string, optional (default is Dina), override the title font name
+    12,                                -- integer, optional (default is 10), override the title font size
+    body_font_name,                    -- string, optional (default is Dina), override the body text font name
+    body_font_size,                    -- integer, optional (default is 10), override the body text font size
+    100,                               -- integer, optional (default is 1000), maximum number of text lines to keep
+    5,                                 -- integer, optional (default is 5 pixels), space between text and miniwindow frame
+    false,                             -- boolean, optional (default is false), true will prevent the window from appearing until you call :show() on it
+    false                              -- boolean, optional (default is false), if true, pixels the same color as Theme.PRIMARY_BODY will be transparent
+)
 
-
- local map_data = {} -- To accumulate map data
- local is_map_drawing = false -- Flag to check if the map is being drawn
- 
- -- Trigger when map starts
- function startMapDrawing()
-     map_data = {} -- Reset map data
-     is_map_drawing = true -- Set flag to indicate that we're drawing a map
-     my_window:blank() -- Clear the existing window content before starting a new map
- end
- 
- -- Trigger when map ends
- function endMapDrawing()
-     is_map_drawing = false -- Map drawing is complete
-     if font_size ~= body_font_size then 
-        font_size = body_font_size
-        my_window:fit_size(
-            310,        -- Width of the text content area
-            18,         -- Number of lines for the text content area
-            1000,       -- Upper limit on window width
-            1000        -- Upper limit on window height
-        )
-    end
-     -- Redraw the map after all map lines have been processed
-     redrawMap()
- 
-     -- Perform buffered repaint to optimize rendering
-     CallPlugin("abc1a0944ae4af7586ce88dc", "BufferedRepaint")
- end
- 
- -- Capture each line of the map during map drawing
- function catchMap(name, line, wildcards, styles)
-    -- Check if we're in the process of drawing a map
-    if is_map_drawing then
-        -- Are wildcards and styles are valid tables before processing?
-        if wildcards and styles then
-            table.insert(map_data, {wildcards = wildcards, styles = styles})
-        end
-    end
-end
- 
--- Redraw the map after it has been fully received
-function redrawMap()
-    local all_formatted_styles = {}  -- To accumulate all lines' styles
-
-    -- Iterate over each entry in map_data to build formatted styles
-    for _, entry in ipairs(map_data) do
-        -- Ensure that both wildcards and styles are present
-        if entry.wildcards and entry.styles then
-            local line_styles = {}  -- To accumulate styles for a single line
-
-            -- Iterate over each style in the entry
-            for _, style in ipairs(entry.styles) do
-                -- Only include segments with non-empty text
-                if style.text and style.length > 0 then
-                    table.insert(line_styles, {
-                        bold = style.bold,
-                        backcolour = style.backcolour,
-                        length = style.length,
-                        textcolour = style.textcolour,
-                        text = style.text
-                    })
+-- Handle GMCP for room.map
+function OnPluginBroadcast(msg, id, name, text)
+    if (id == '3e7dedbe37e44942dd46d264') then
+        if (text == "room.map") then   
+            local gmcp_map = gmcp("room.map")
+            if gmcp_map and gmcp_map.map then
+                my_window:clear()
+                
+                -- Split the map text into lines
+                local lines = {}
+                for line in gmcp_map.map:gmatch("[^\r\n]+") do
+                    table.insert(lines, line)
                 end
-            end
-
-            -- Only add the line if it has at least one style segment
-            if #line_styles > 0 then
-                table.insert(all_formatted_styles, line_styles)
+                
+                -- Build the complete map text with proper line breaks
+                local full_map_text = ""
+                for k, v in ipairs(lines) do
+                    full_map_text = full_map_text .. v
+                    if k &lt; #lines then
+                        full_map_text = full_map_text .. "\n"
+                    end
+                end
+                
+                -- Add all the text at once
+                my_window:add_text(full_map_text, true)
+                
+                -- Don't resize - just draw at current size
+                my_window:draw()
             end
         end
-    end
-
-    -- Clear the window before adding new content to prevent duplication
-
-    -- Add all formatted lines to the window in a single call
-    my_window:add_text(all_formatted_styles, false)
-
-    -- Draw the window after adding all text
-    my_window:draw()
-
-    -- Clear map_data to prevent re-processing the same data
-    map_data = {}
-end
-
-
-
-function toggleOmitFromOutput()
-    local triggers = {"map_start", "catchMap", "map_end"}
-    for _, triggerName in ipairs(triggers) do
-        local currentValue = GetTriggerOption(triggerName, "omit_from_output")
-        if currentValue == "1" then
-            SetTriggerOption(triggerName, "omit_from_output", "0")
-        else
-            SetTriggerOption(triggerName, "omit_from_output", "1")
-        end
-        local newValue = GetTriggerOption(triggerName, "omit_from_output")
-        print("Trigger: " .. triggerName .. " Omit from output: " .. newValue)
     end
 end
 
