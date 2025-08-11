@@ -9,7 +9,7 @@
    purpose="Displays the Ascii Map"
    date_written="2024-03-27"
    requires="4.00"
-   version="2.1"
+   version="2.2"
    save_state="y"
    >
 </plugin>
@@ -181,7 +181,7 @@ my_window = ThemedTextWindow(
  function startMapDrawing()
      map_data = {} -- Reset map data
      is_map_drawing = true -- Set flag to indicate that we're drawing a map
-     my_window:blank() -- Clear the existing window content before starting a new map
+    -- my_window:blank() -- Clear the existing window content before starting a new map
     
  end
  
