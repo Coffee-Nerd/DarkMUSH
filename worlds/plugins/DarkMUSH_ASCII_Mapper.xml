@@ -9,7 +9,7 @@
    purpose="Displays the Ascii Map"
    date_written="2024-03-27"
    requires="4.00"
-   version="2.2"
+   version="2.4"
    save_state="y"
    >
 </plugin>
