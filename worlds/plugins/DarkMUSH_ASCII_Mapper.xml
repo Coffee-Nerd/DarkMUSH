@@ -9,7 +9,7 @@
    purpose="Displays the Ascii Map"
    date_written="2024-03-27"
    requires="4.00"
-   version="2.4"
+   version="3.0"
    save_state="y"
    >
 </plugin>
@@ -46,7 +46,7 @@ if wanted_font then
         win_height,        -- integer, required, how big to make it if the player hasn't moved it  -- height
         "$x009DA$x202RK$x208MU$x214S$x220H$x01 AS$x190CI$x154I M$x118AP$x082PE$x047R",               -- string, optional (nil means no titlebar), text to put into the title
         "center",       -- string, optional (default is "center"), "left", "center", or "right"
-        false,          -- boolean, optional (default is false), true adds a close button in the top left
+        true,          -- boolean, optional (default is false), true adds a close button in the top left
         true,            -- boolean, optional (default is false), make the window resizeable
         false,       -- boolean, optional (default is false), add a scrollbar and mousewheel scrolling
         false,       -- boolean, optional (default is false), make the text selectable
@@ -60,10 +60,25 @@ if wanted_font then
         17,        -- integer, optional (default is 1000), maximum number of text lines to keep
         5,          -- integer, optional (default is 5 pixels), space between text and miniwindow frame
         false,         -- boolean, optional (default is false), true will prevent the window from appearing until you call :show() on it
-        false    -- boolean, optional (default is false), if true, pixels the same color as Theme.PRIMARY_BODY will be transparent
+        false,    -- boolean, optional (default is false), if true, pixels the same color as Theme.PRIMARY_BODY will be transparent
+        changeFontForASCIIMapper    -- function, optional, custom close button callback function
      )
+
+     -- Check if we have map data, if not show placeholder
+     if #map_data == 0 then
+         my_window:add_text("No Map Data yet.", true)
+         my_window:add_text("Turn on AUTOMAP,", true)
+         my_window:add_text("or move rooms.", true)
+         my_window:add_text("Click top left", true)
+         my_window:add_text("button to change font", true)
+         my_window:add_text("", true)  -- Add a blank line for spacing
+     else
+         -- Redraw existing map data with new font
+         redrawMap()
+     end
+
      SaveState()
-    
+
 end
 </send>
 </alias>
@@ -150,6 +165,77 @@ body_font_name = GetVariable("body_font_name") or "Lucida Console"
 body_font_size = GetVariable("body_font_size") or 40
 font_id = "font"
 MapTextWidth = math.max(WindowTextWidth("testwindow2", font_id, "1234567"))
+
+-- Flag to prevent font dialog during initial setup and plugin closing
+local plugin_installation_time = GetInfo(232) -- Get current time
+local plugin_is_closing = false  -- Start as false, will be set to true only during OnPluginClose
+SetVariable("plugin_is_closing", "false")  -- Clear any previous closing state
+
+-- Function to handle font changes (defined before window creation)
+function changeFontForASCIIMapper()
+    -- Don't show dialog if plugin is closing or we're within 1 second of plugin installation
+    local current_time = GetInfo(232)
+    if plugin_is_closing or (current_time - plugin_installation_time) &lt; 1 then
+        return false
+    end
+    local wanted_font = utils.fontpicker(body_font_name, body_font_size)
+    if wanted_font then
+        body_font_name = wanted_font.name
+        body_font_size = wanted_font.size
+        SetVariable("body_font_size", body_font_size)
+        SetVariable("body_font_name", body_font_name)
+
+        -- Update font in the test window
+        font_id = "font"
+        WindowFont("testwindow2", font_id, body_font_name, body_font_size, false, false, false, false, 0)
+
+        -- Recalculate window dimensions based on new font
+        MapTextWidth = math.max(WindowTextWidth("testwindow2", font_id, "1234567123456712345"))
+        if MapTextWidth and MapTextWidth > 0 then
+            win_width = MapTextWidth
+            SetVariable("win_width", win_width)
+            win_height = MapTextWidth
+            SetVariable("win_height", win_height)
+        end
+
+        -- Recreate the window with the new font
+        my_window:delete(true) -- deferred delete to avoid issues
+
+        -- Use DoAfterSpecial to recreate the window after deletion
+        DoAfterSpecial(0.2, [[
+            my_window = ThemedTextWindow(
+                "testwindow2",
+                0, 0,
+                ]] .. win_width .. [[, ]] .. win_height .. [[,
+                "$x009DA$x202RK$x208MU$x214S$x220H$x011 AS$x190CI$x154I M$x118AP$x082PE$x047R",
+                "center", true, true, false, false, false, false, false,
+                "]] .. body_font_name .. [[", 12, "]] .. body_font_name .. [[", ]] .. body_font_size .. [[, 17, 5, false, false, changeFontForASCIIMapper
+            )
+
+            -- Check if we have map data, if not show placeholder
+            if #map_data == 0 then
+                my_window:add_text("No Map Data yet.", true)
+                my_window:add_text("Turn on AUTOMAP,", true)
+                my_window:add_text("or move rooms.", true)
+                my_window:add_text("Click top left", true)
+                my_window:add_text("button to change font", true)
+                my_window:add_text("", true)  -- Add a blank line for spacing
+            else
+                -- Redraw existing map data with new font
+                redrawMap()
+            end
+        ]], 12)
+
+        -- Use a safer print method that doesn't cause ANSI errors
+        ColourNote("red", "", "Setting the font to " .. body_font_name .. " with a size of " .. body_font_size)
+    end
+end
+
+-- OnPluginClose function to detect when plugin is shutting down
+function OnPluginClose()
+    plugin_is_closing = true
+    SetVariable("plugin_is_closing", "true")
+end
 my_window = ThemedTextWindow(
     "testwindow2",                    -- string, required, a unique identifier for this window
     0,                  -- integer, required, where to put it if the player hasn't moved it
@@ -172,17 +258,30 @@ my_window = ThemedTextWindow(
     17,        -- integer, optional (default is 1000), maximum number of text lines to keep
     5,          -- integer, optional (default is 5 pixels), space between text and miniwindow frame
     false,         -- boolean, optional (default is false), true will prevent the window from appearing until you call :show() on it
-    false    -- boolean, optional (default is false), if true, pixels the same color as Theme.PRIMARY_BODY will be transparent
+    false,    -- boolean, optional (default is false), if true, pixels the same color as Theme.PRIMARY_BODY will be transparent
+    changeFontForASCIIMapper    -- function, optional, custom close button callback function
  )
- local map_data = {} -- To accumulate map data
+
+-- Add placeholder message until map data is received
+my_window:add_text("No Map Data yet.", true)
+my_window:add_text("Turn on AUTOMAP,", true)
+my_window:add_text("or move rooms.", true)
+my_window:add_text("Click top left", true)
+my_window:add_text("button to change font", true)
+my_window:add_text("", true)  -- Add a blank line for spacing
+
+-- The closing flag is already false and the font button should work after 1 second
+
+ map_data = {} -- To accumulate map data (global to be accessible from aliases)
  local is_map_drawing = false -- Flag to check if the map is being drawn
- 
+
  -- Trigger when map starts
  function startMapDrawing()
      map_data = {} -- Reset map data
      is_map_drawing = true -- Set flag to indicate that we're drawing a map
-    -- my_window:blank() -- Clear the existing window content before starting a new map
-    
+     -- Clear the placeholder message when map data starts arriving
+     my_window:clear(false)
+
  end
  
  -- Trigger when map ends
@@ -253,8 +352,10 @@ function redrawMap()
     
     end
     -- Clear the window before adding new content to prevent duplication
-    -- Add all formatted lines to the window in a single call
-    my_window:add_text(all_formatted_styles, false)
+    -- Only add text if we have content to display
+    if #all_formatted_styles > 0 then
+        my_window:add_text(all_formatted_styles, false)
+    end
     -- Draw the window after adding all text
     my_window:draw()
     -- Clear map_data to prevent re-processing the same data
