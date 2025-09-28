@@ -12,7 +12,7 @@ language="Lua"
 purpose="Showing affects in a window"
 date_written="2019-07-03 12:04:56"
 requires="5.00"
-  version="3.5"
+  version="3.6"
 >
 
 </plugin>
@@ -472,11 +472,16 @@ requires="5.00"
 
 	function AddAffectTimed(spell, duration)
 		DebugNote("AddAffectTimed")
-		if (spell ~= nil and duration ~= nil) then
+		if (spell ~= nil) then
 			DebugNote("Spell: " .. spell)
-			DebugNote("Duration: " .. duration)
+			if duration ~= nil then
+				DebugNote("Duration: " .. duration)
+			else
+				DebugNote("Duration: PERMANENT")
+				duration = -1  -- Set permanent affects to -1 duration
+			end
 			spell = string.gsub(spell, " ", "_")
-			
+
 			-- Queue this affect for safe addition instead of adding immediately
 			table.insert(pending_additions, {spell = spell, duration = duration})
 		end -- if
