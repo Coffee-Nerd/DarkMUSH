@@ -182,7 +182,8 @@ function ThemedWindowClass:dress_window(new_title)
    end
 
    if self.is_temporary then
-      local right, bottom = self:add_3d_text_button(self.id.."_close", -1, -1, "!", false, "Remove Window", ThemedWindowClass.LeftButtonOnlyCallback, ThemedWindowClass.DeleteCallback, self.title_font, Theme.TITLE_PADDING, Theme.TITLE_PADDING)
+      local close_callback = self.custom_close_callback or ThemedWindowClass.DeleteCallback
+      local right, bottom = self:add_3d_text_button(self.id.."_close", -1, -1, "!", false, "Remove Window", ThemedWindowClass.LeftButtonOnlyCallback, close_callback, self.title_font, Theme.TITLE_PADDING, Theme.TITLE_PADDING)
       right = right+1
       WindowLine(self.id, right, -1, right, bottom, Theme.THREE_D_HIGHLIGHT, miniwin.pen_solid, 1)
    else
@@ -262,9 +263,9 @@ end
 
 
 function ThemedBasicWindow(
-   id, default_left_position, default_top_position, default_width, default_height, title, title_alignment, is_temporary, 
+   id, default_left_position, default_top_position, default_width, default_height, title, title_alignment, is_temporary,
    resizer_type, do_while_resizing, do_after_resizing, do_on_delete, title_font_name, title_font_size, defer_showing,
-   body_is_transparent
+   body_is_transparent, custom_close_callback
 )
    assert(id and type(id) == "string" and id ~= "", "ThemedBasicWindow Error: argument 1, id is required (must be a non-empty string)")
    assert(default_left_position, "ThemedBasicWindow Error: argument 2, default_left_position is required")
@@ -293,6 +294,7 @@ function ThemedBasicWindow(
       do_on_delete = do_on_delete,
       resizer_type = resizer_type,
       is_temporary = is_temporary,
+      custom_close_callback = custom_close_callback,
       width = (resizer_type ~= nil) and tonumber(GetVariable("themed_miniwindow_width"..id)) or default_width,
       height = (resizer_type ~= nil) and tonumber(GetVariable("themed_miniwindow_height"..id)) or default_height,
       create_flags = body_is_transparent and 4 or 0,
@@ -476,11 +478,11 @@ function ThemedTextWindowClass:clear(draw_after)
 end
 
 function ThemedTextWindow(
-   id, default_left_position, default_top_position, default_width, default_height, title, title_alignment, 
+   id, default_left_position, default_top_position, default_width, default_height, title, title_alignment,
    is_temporary, resizeable, text_scrollable, text_selectable, text_copyable, url_hyperlinks,
    autowrap,
    title_font_name, title_font_size, text_font_name, text_font_size, text_max_lines, text_padding,
-   defer_showing, body_is_transparent
+   defer_showing, body_is_transparent, custom_close_callback
 )
    assert(id, "ThemedTextWindow Error: argument 1, id is required")
    assert(default_left_position, "ThemedTextWindow Error: argument 2, default_left_position is required")
@@ -502,9 +504,9 @@ function ThemedTextWindow(
    end
 
    local self = ThemedBasicWindow(
-      id, default_left_position, default_top_position, default_width, default_height, title, title_alignment, is_temporary, 
-      resizer_type, ThemedTextWindowClass.do_while_resizing, ThemedTextWindowClass.do_after_resizing, 
-      ThemedTextWindowClass.OnDelete, title_font_name, title_font_size, defer_showing, body_is_transparent
+      id, default_left_position, default_top_position, default_width, default_height, title, title_alignment, is_temporary,
+      resizer_type, ThemedTextWindowClass.do_while_resizing, ThemedTextWindowClass.do_after_resizing,
+      ThemedTextWindowClass.OnDelete, title_font_name, title_font_size, defer_showing, body_is_transparent, custom_close_callback
    )
    setmetatable(self, ThemedTextWindowClass)
 
