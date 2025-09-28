@@ -12,7 +12,7 @@ language="Lua"
 purpose="Showing affects in a window"
 date_written="2019-07-03 12:04:56"
 requires="5.00"
-  version="3.4"
+  version="3.5"
 >
 
 </plugin>
@@ -163,7 +163,7 @@ requires="5.00"
 	
 	-- Miniwindow State
 	local winid = "win_" .. GetPluginID()
-	local version = "3.4"
+	local version = "3.5"
 	local hiddenWindow = winid .. "text_background_offscreen"
 	local bg_color = "#000000"
 	local last_refresh = 0 -- last window refresh
@@ -447,11 +447,16 @@ requires="5.00"
 
 	function AddAffectTimed(spell, duration)
 		DebugNote("AddAffectTimed")
-		if (spell ~= nil and duration ~= nil) then
+		if (spell ~= nil) then
 			DebugNote("Spell: " .. spell)
-			DebugNote("Duration: " .. duration)
+			if duration ~= nil then
+				DebugNote("Duration: " .. duration)
+			else
+				DebugNote("Duration: PERMANENT")
+				duration = -1  -- Set permanent affects to -1 duration
+			end
 			spell = string.gsub(spell, " ", "_")
-			
+
 			-- Queue this affect for safe addition instead of adding immediately
 			table.insert(pending_additions, {spell = spell, duration = duration})
 		end -- if
@@ -580,14 +585,15 @@ requires="5.00"
 		for _, addition in ipairs(pending_additions) do
 			local spell = addition.spell
 			local duration = addition.duration
-			
+
 			local k, v = FindAffectInInfos(spell)
-			if (k == -1 and duration and affect_icons[spell] ~= nil) then
-				DebugNote("Adding New Timed Affect")
+			if (k == -1 and affect_icons[spell] ~= nil) then
+				DebugNote("Adding New Affect (duration: " .. tostring(duration) .. ")")
 				-- Use 64x64 folder if image size is 64, otherwise use regular folder
 				local folder_path = (image_size == 64) and path_prefix_64 or path_prefix
 				PlaceNewGIF(folder_path .. affect_icons[spell], nil, duration, true)
-			elseif (duration and affect_icons[spell] ~= nil) then
+			elseif (affect_icons[spell] ~= nil) then
+				DebugNote("Updating Existing Affect (duration: " .. tostring(duration) .. ")")
 				v.enabled = true
 				v.ticks_left = duration
 			end -- if
